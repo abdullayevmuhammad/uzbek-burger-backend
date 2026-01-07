@@ -1,5 +1,6 @@
 # inventory/models.py
 import uuid
+from django.conf import settings
 from django.db import models
 from core.models import Branch
 from catalog.models import Product
@@ -34,6 +35,20 @@ class StockImport(models.Model):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="stock_imports")
     note = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="created_stock_imports",
+    )
+    posted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="posted_stock_imports",
+    )
+    posted_at = models.DateTimeField(null=True, blank=True)
 
     paid_from_account = models.ForeignKey(
         "finance.MoneyAccount",

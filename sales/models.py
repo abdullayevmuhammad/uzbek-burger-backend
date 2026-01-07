@@ -4,6 +4,7 @@ from django.core.validators import MinValueValidator
 from core.models import Branch
 from menu.models import Food
 from finance.models import MoneyAccount, CashTransaction
+from django.conf import settings
 
 
 class Order(models.Model):
@@ -17,6 +18,19 @@ class Order(models.Model):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
     stock_applied = models.BooleanField(default=False)
     note = models.CharField(max_length=255, blank=True, null=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="created_orders",
+    )
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="paid_orders",
+    )
 
     total_amount = models.BigIntegerField(default=0)  # snapshot
     paid_amount = models.BigIntegerField(default=0)

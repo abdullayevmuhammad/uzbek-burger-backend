@@ -6,7 +6,7 @@ from django.db.models import Sum
 from .models import StockImport, BranchProduct
 from finance.models import Direction, TxnType
 from finance.services import record_cash_txn
-
+from django.utils import timezone
 Q0 = Decimal("0")
 Q1 = Decimal("1")
 
@@ -18,7 +18,7 @@ def _money_div(total_cost: int, qty: Decimal) -> int:
     return int(unit)
 
 @transaction.atomic
-def post_stock_import(stock_import: StockImport) -> None:
+def post_stock_import(stock_import: StockImport, *, by_user=None) -> None:
     """
     POST = real apply:
       - BranchProduct.stock_qty oshadi
@@ -99,4 +99,7 @@ def post_stock_import(stock_import: StockImport) -> None:
 
     # 3) Status POSTED
     imp.status = StockImport.Status.POSTED
-    imp.save(update_fields=["status"])
+    imp.posted_by = by_user
+    imp.posted_at = timezone.now()
+    imp.save(update_fields=["status", "posted_by", "posted_at"])
+    imp.created_by = by_user

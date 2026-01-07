@@ -60,7 +60,7 @@ def _consume_stock_for_paid_order(order: Order) -> None:
 
 
 @transaction.atomic
-def pay_order(order: Order, *, account, amount: int, note: str | None = None) -> OrderPayment:
+def pay_order(order: Order, *, account, amount: int, note: str | None = None, by_user) -> OrderPayment:
     o = Order.objects.select_for_update().get(pk=order.pk)
     if o.status == Order.Status.CANCELED:
         raise ValueError("Canceled order cannot be paid")
@@ -94,12 +94,12 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None) ->
     recalc_order_totals(o)
 
     # agar to‘liq yopildi -> PAID + stock yechish
-    if o.paid_amount >= o.total_amount and o.total_amount > 0:
+    if o.total_amount > 0 and o.paid_amount >= o.total_amount:
         o.status = Order.Status.PAID
         o.paid_at = timezone.now()
-        o.save(update_fields=["status", "paid_at"])
+        o.paid_by = by_user
+        o.save(update_fields=["status", "paid_at", "paid_by"])
 
-        apply_stock_for_order_if_needed(o)
     return p
 
 

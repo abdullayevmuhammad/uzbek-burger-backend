@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "core",
     "finance",
     "sales",
+    "users",
 ]
 
 REST_FRAMEWORK = {

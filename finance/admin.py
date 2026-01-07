@@ -1,6 +1,17 @@
 # finance/admin.py
 from django.contrib import admin
 from .models import MoneyAccount, CashTransaction
+from users.models import StaffRole
+
+def _is_owner(user):
+    prof = getattr(user, "profile", None)
+    return bool(prof and prof.is_active and prof.role == StaffRole.OWNER)
+
+def _staff_branch_id(user):
+    prof = getattr(user, "profile", None)
+    if not prof or not prof.is_active:
+        return None
+    return prof.branch_id
 
 
 class CashTransactionInline(admin.TabularInline):
@@ -55,6 +66,12 @@ class MoneyAccountAdmin(admin.ModelAdmin):
 
     # (ixtiyoriy) kind sizga kerak bo'lmasa, shuni yoqing:
     # fields = ("branch", "name", "is_active", "balance_cache")
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if _is_owner(request.user):
+            return qs
+        bid = _staff_branch_id(request.user)
+        return qs.filter(branch_id=bid)
 
 
 @admin.register(CashTransaction)
@@ -87,3 +104,9 @@ class CashTransactionAdmin(admin.ModelAdmin):
 
     # def has_delete_permission(self, request, obj=None):
     #     return False
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if _is_owner(request.user):
+            return qs
+        bid = _staff_branch_id(request.user)
+        return qs.filter(branch_id=bid)
