@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block title %}{{ food.name }}{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>{{ food.name }}</h2>
+      <div class="hint">Taom ma’lumotlari va rasmni tahrirlash.</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a class="btn" href="{% url '' %}">Ro‘yxat</a>
+      <a class="btn" href="{% url '' %}">Menu board</a>
+      <a class="btn btn-ghost" href="{% url '' food.id %}">O‘chirish</a>
+    </div>
+  </div>
+
+  <div class="card form-card">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="notice notice-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="form-grid">
+        <div class="fg">
+          <label for="{{ form.type.id_for_label }}">Type</label>
+          {{ form.type }}
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.category.id_for_label }}">Kategoriya</label>
+          {{ form.category }}
+        </div>
+
+        <div class="fg span-2">
+          <label for="{{ form.name.id_for_label }}">Nomi</label>
+          {{ form.name }}
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.sell_price.id_for_label }}">Narx (so‘m)</label>
+          {{ form.sell_price }}
+          <div class="help">Variantlar ishlatilmaydi: har bir narxli konfiguratsiya alohida Taom (Food) sifatida qo‘shiladi.</div>
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.sort_order.id_for_label }}">Tartib (sort)</label>
+          {{ form.sort_order }}
+        </div>
+
+        <div class="fg span-2">
+          <label for="{{ form.image.id_for_label }}">Rasm</label>
+          {{ form.image }}
+        </div>
+
+        <div class="check-row span-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}">Aktiv (menu’da ko‘rinsin)</label>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Saqlash</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

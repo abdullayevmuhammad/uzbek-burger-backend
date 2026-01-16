@@ -20,9 +20,13 @@ class BranchProduct(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["branch", "product"], name="uniq_branch_product"),
         ]
+        verbose_name = "Filial mahsuloti"
+        verbose_name_plural = "Filial mahsulotlari"
 
     def __str__(self):
         return f"{self.branch} - {self.product}"
+
+
 
 
 class StockImport(models.Model):
@@ -65,7 +69,9 @@ class StockImport(models.Model):
 
     def __str__(self):
         return f"{self.branch.name} | {str(self.id)[:8]}"
-
+    class Meta:
+        verbose_name = "Ombor importi"
+        verbose_name_plural = "Ombor importlari"
 
 class StockImportItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -79,5 +85,9 @@ class StockImportItem(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["stock_import", "product"], name="uniq_import_product")
         ]
+        verbose_name = "Ombor import bo'lagi"
+        verbose_name_plural = "Ombor import bo'laklari"
     def __str__(self):
         return f"{self.product.name} x {self.qty}"
+
+

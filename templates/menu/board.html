@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% load static %}
+{% load money %}
+
+{% block title %}Menyu{% endblock %}
+
+{% block content %}
+{% with current_mode=mode|default:active_type|default:"ALL" %}
+<div class="menu-board-body">
+  <div class="menu-board">
+
+    <header class="mb-head">
+      <div class="mb-left">
+        <img class="mb-logo" src="{% static 'img/logo.svg' %}" alt="UzbekBurger">
+        <div>
+          <div class="mb-title">UZBEK BURGER</div>
+          <div class="mb-sub">{% if branch %}{{ branch.name }}{% else %}Filial tanlanmagan{% endif %}</div>
+        </div>
+      </div>
+
+      <div class="mb-right">
+        <div class="mb-phone">☎ 33 458-14-14</div>
+        <div class="mb-phone">☎ 33 270-18-18</div>
+
+        {% if user.is_staff or user.is_superuser or is_admin_like %}
+          <div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+            <a class="btn btn-primary" href="{% url 'menu_food_add' %}">+ Menyuga qo‘shish</a>
+            <a class="btn" href="{% url 'menu_food_list' %}">CRUD</a>
+          </div>
+        {% endif %}
+      </div>
+    </header>
+
+    <nav class="mb-types">
+      <a class="mb-type {% if current_mode == 'ALL' %}active{% endif %}" href="{% url 'menu_board' %}">Barchasi</a>
+      <a class="mb-type {% if current_mode == FoodType.FASTFOOD %}active{% endif %}" href="{% url 'menu_board' %}?type={{ FoodType.FASTFOOD }}">Fastfood</a>
+      <a class="mb-type {% if current_mode == FoodType.DRINK %}active{% endif %}" href="{% url 'menu_board' %}?type={{ FoodType.DRINK }}">Ichimliklar</a>
+      <a class="mb-type {% if current_mode == FoodType.SET %}active{% endif %}" href="{% url 'menu_board' %}?type={{ FoodType.SET }}">Setlar</a>
+    </nav>
+
+    {% if current_mode != 'ALL' %}
+      <div class="mb-cats">
+        <a class="mb-cat {% if not active_cat %}active{% endif %}" href="{% url 'menu_board' %}?type={{ current_mode }}">Barchasi</a>
+        {% for c in categories %}
+          <a class="mb-cat {% if active_cat|default:'' == c.id|stringformat:'s' %}active{% endif %}"
+             href="{% url 'menu_board' %}?type={{ current_mode }}&cat={{ c.id }}">
+            {{ c.name }}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if current_mode == 'ALL' and groups %}
+      {% for key, items in groups %}
+        {# key: (type_label, cat_label, cat_id) #}
+        <div class="mb-section">
+          <div class="mb-section-title">{{ key.0 }} • {{ key.1 }}</div>
+
+          <section class="mb-grid">
+            {% for f in items %}
+              <button class="mb-card" type="button" data-food-id="{{ f.id }}">
+                <div class="mb-img">
+                  {% if f.image %}
+                    <img src="{{ f.image.url }}" alt="{{ f.name }}">
+                  {% else %}
+                    <div class="mb-img-ph">Rasm yo‘q</div>
+                  {% endif %}
+                </div>
+
+                <div class="mb-name">{{ f.name }}</div>
+
+                <div class="mb-price">
+                  <span class="mb-price-chip">{{ f.sell_price|som }}</span>
+                </div>
+              </button>
+            {% endfor %}
+          </section>
+        </div>
+      {% empty %}
+        <div class="mb-empty">Menu bo‘sh.</div>
+      {% endfor %}
+
+    {% else %}
+      <section class="mb-grid">
+        {% for f in foods %}
+          <button class="mb-card" type="button" data-food-id="{{ f.id }}">
+            <div class="mb-img">
+              {% if f.image %}
+                <img src="{{ f.image.url }}" alt="{{ f.name }}">
+              {% else %}
+                <div class="mb-img-ph">Rasm yo‘q</div>
+              {% endif %}
+            </div>
+
+            <div class="mb-name">{{ f.name }}</div>
+
+            <div class="mb-price">
+              <span class="mb-price-chip">{{ f.sell_price|som }}</span>
+            </div>
+          </button>
+        {% empty %}
+          <div class="mb-empty">Bu bo‘limda ovqatlar yo‘q.</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+  </div>
+
+  <dialog id="foodDialog" class="mb-dialog">
+    <div class="mb-dialog-inner">
+      <button class="mb-x" type="button" onclick="window.foodDialog.close()">✕</button>
+      <div id="foodDialogBody"></div>
+    </div>
+  </dialog>
+
+  <script>
+    const foodDialog = document.getElementById("foodDialog");
+    window.foodDialog = foodDialog;
+
+    function moneyUZS(n){
+      try{
+        const x = Number(n || 0);
+        return x.toLocaleString("ru-RU") + " so‘m";
+      }catch(e){
+        return (n ?? 0) + " so‘m";
+      }
+    }
+
+    document.addEventListener("click", async (e) => {
+      // allow normal navigation on tabs/filters
+      if (e.target.closest("a.mb-cat, a.mb-type")) return;
+
+      const btn = e.target.closest(".mb-card");
+      if(!btn) return;
+
+      const id = btn.getAttribute("data-food-id");
+      const res = await fetch(`/menu/food/${id}/json/`);
+      if(!res.ok) return;
+
+      const data = await res.json();
+      const priceHtml = `<div class="mb-d-block">
+             <div class="mb-d-h">Narx</div>
+             <div class="mb-d-price"><b>${moneyUZS(data.sell_price)}</b></div>
+           </div>`;
+
+      const itemsHtml = (data.items || []).length
+        ? `<div class="mb-d-block">
+             <div class="mb-d-h">Tarkibi</div>
+             <ul class="mb-d-list">
+               ${data.items.map(i => `<li>${i.product} — ${i.qty} ${i.unit}</li>`).join("")}
+             </ul>
+           </div>`
+        : `<div class="mb-d-block"><div class="mb-d-h">Tarkibi</div><div class="mb-d-muted">Tarkib kiritilmagan</div></div>`;
+
+      const imgHtml = data.image
+        ? `<img class="mb-d-img" src="${data.image}" alt="${data.name}">`
+        : `<div class="mb-d-imgph">Rasm yo‘q</div>`;
+
+      document.getElementById("foodDialogBody").innerHTML = `
+        <div class="mb-d">
+          <div class="mb-d-top">
+            ${imgHtml}
+            <div class="mb-d-meta">
+              <div class="mb-d-title">${data.name}</div>
+              <div class="mb-d-sub">${data.category || ""}</div>
+              ${priceHtml}
+            </div>
+          </div>
+          ${itemsHtml}
+        </div>
+      `;
+
+      foodDialog.showModal();
+    });
+  </script>
+</div>
+{% endwith %}
+{% endblock %}

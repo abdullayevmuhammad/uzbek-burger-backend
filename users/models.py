@@ -40,3 +40,6 @@ class StaffProfile(models.Model):
         if self.role == StaffRole.OWNER:
             return f"{self.user.username} (OWNER)"
         return f"{self.user.username} ({self.branch})"
+    class Meta:
+        verbose_name = "Xodim"
+        verbose_name_plural = "Xodimlar"

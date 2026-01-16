@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Bosh sahifa — UzbekBurger{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Bosh sahifa</h2>
+      <div class="hint">POS — operatorlar uchun. Import/Menyu/Ombor boshqaruvi — admin panelda.</div>
+    </div>
+  </div>
+
+  <div class="notice notice-info" style="margin-bottom:12px;">
+    Faol filial:
+    <strong>{% if active_branch %}{{ active_branch.name }}{% else %}Tanlanmagan{% endif %}</strong>
+    {% if is_admin_like and not active_branch %}
+      <span class="muted"> • Yuqoridan “Filialni tanlash” orqali tanlang.</span>
+    {% endif %}
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Kassa (POS)</h3>
+      <p>Buyurtma qabul qilish, chek, to‘lovlar, topshirish.</p>
+      <div style="margin-top:10px;">
+        <a class="btn btn-primary" href="{% url 'sales:pos_orders' %}">POSga o‘tish</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Admin panel</h3>
+      <p>Mahsulotlar, import, menyu, filiallar, foydalanuvchilar va sozlamalar.</p>
+      <div style="margin-top:10px;">
+        <a class="btn" href="/admin/" target="_blank" rel="noopener">Adminni ochish</a>
+      </div>
+    </div>
+  </div>
+{% endblock %}

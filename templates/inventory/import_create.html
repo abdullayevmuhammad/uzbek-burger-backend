@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Yangi import — UzbekBurger{% endblock %}
+
+{% block content %}
+  <h2 style="margin:0 0 12px;">Yangi import</h2>
+
+  <div class="card" style="grid-column: span 12;">
+    <form method="post">
+      {% csrf_token %}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Izoh</label>
+          {{ form.note }}
+        </div>
+
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Qaysi hisobdan to‘landi?</label>
+          {{ form.paid_from_account }}
+        </div>
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:10px;">
+        <button class="btn btn-primary" type="submit">Saqlash</button>
+        <a class="btn" href="{% url 'import_list' %}">Bekor qilish</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}

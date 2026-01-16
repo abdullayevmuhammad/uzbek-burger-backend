@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block title %}Kassa (POS){% endblock %}
+
+{% block content %}
+<div class="pos-page-head">
+  <div>
+    <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
+    <h1 class="pos-h1">Buyurtmalar</h1>
+  </div>
+
+  <div class="pos-head-actions">
+    <a class="btn btn-primary" href="{% url 'sales:pos_order_create' %}">+ Yangi buyurtma</a>
+  </div>
+</div>
+
+<form class="pos-filters" method="get">
+  <div class="pos-filter">
+    <label>Status</label>
+    <select class="control" name="status">
+      <option value="">Barchasi</option>
+      <option value="{{ Status.DRAFT }}" {% if status == Status.DRAFT %}selected{% endif %}>Yangi</option>
+      <option value="{{ Status.PAID }}" {% if status == Status.PAID %}selected{% endif %}>To‘langan</option>
+      <option value="{{ Status.CANCELED }}" {% if status == Status.CANCELED %}selected{% endif %}>Bekor qilingan</option>
+    </select>
+  </div>
+
+  <div class="pos-filter">
+    <label>Topshirilgan</label>
+    <select class="control" name="delivered">
+      <option value="">Barchasi</option>
+      <option value="1" {% if delivered == "1" %}selected{% endif %}>Ha</option>
+      <option value="0" {% if delivered == "0" %}selected{% endif %}>Yo‘q</option>
+    </select>
+  </div>
+
+  <div class="pos-filter-btns">
+    <button class="btn" type="submit">Filtrlash</button>
+    <a class="btn btn-ghost" href="{% url 'sales:pos_orders' %}">Tozalash</a>
+  </div>
+</form>
+
+<div class="pos-table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Vaqt</th>
+        <th>Turi</th>
+        <th>Topshirilgan</th>
+        <th>To‘lov</th>
+        <th>Jami</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for o in orders %}
+        <tr>
+          <td><span class="mono">{{ o.id|stringformat:"s"|slice:":8" }}</span></td>
+          <td>{{ o.created_at|date:"d.m.Y H:i" }}</td>
+          <td>{{ o.get_order_type_display }}</td>
+          <td>
+            {% if o.is_delivered %}
+              <span class="badge badge-ok">Ha</span>
+            {% else %}
+              <span class="badge badge-warn">Yo‘q</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if o.is_fully_paid %}
+              <span class="badge badge-ok">To‘langan</span>
+            {% elif o.paid_amount > 0 %}
+              <span class="badge badge-warn">Qisman</span>
+            {% else %}
+              <span class="badge badge-danger">To‘lanmagan</span>
+            {% endif %}
+
+          </td>
+          <td><b>{{ o.total_amount|som }}</b></td>
+          <td style="text-align:right;">
+            <a class="btn btn-sm" href="{% url 'sales:pos_order_detail' o.pk  %}">Ochish</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="7" class="muted" style="padding:18px;">Hozircha buyurtmalar yo‘q.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}O‘chirish{% endblock %}
+
+{% block content %}
+  <div class="card" style="max-width:720px;">
+    <h2>Taomni o‘chirish</h2>
+    <p class="muted" style="margin-top:8px;">
+      Rostdan ham <strong>{{ food.name }}</strong> ni o‘chirmoqchimisiz?
+    </p>
+
+    <form method="post" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+      {% csrf_token %}
+      <button class="btn btn-primary" type="submit">Ha, o‘chirish</button>
+      <a class="btn" href="{% url 'menu_food_edit' food.id %}">Bekor</a>
+    </form>
+  </div>
+{% endblock %}

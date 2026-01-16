@@ -10,3 +10,7 @@ class Branch(models.Model):
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        verbose_name = "Filial"
+        verbose_name_plural = "Filiallar"

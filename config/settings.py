@@ -30,60 +30,70 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
-INSTALLED_APPS = [
+# Optional dependency: django-jazzmin (Admin UI theme)
+HAS_JAZZMIN = False
+try:
+    import jazzmin  # noqa: F401
+    HAS_JAZZMIN = True
+except Exception:
+    HAS_JAZZMIN = False
+
+INSTALLED_APPS = ([] if not HAS_JAZZMIN else ['jazzmin']) + [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # installed_apps
-    "rest_framework",
-    "django_filters",
-    # created apps
+
     "catalog",
     "inventory",
     "menu",
     "core",
-    "finance",
+    "finance.apps.FinanceConfig",
     "sales",
     "users",
 ]
 
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
-    "DEFAULT_FILTER_BACKENDS": ("django_filters.rest_framework.DjangoFilterBackend",),
-}
 
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    "django.middleware.locale.LocaleMiddleware",
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.AdminGuardMiddleware',
+    "core.middleware.ActiveBranchMiddleware",  # ✅ qo'shildi
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "core.context_processors.app_context",
             ],
+            "libraries": {  # ✅ qo'lda ro'yxatdan o'tkazamiz
+                "money": "core.templatetags.money",
+            },
         },
     },
 ]
+
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
@@ -133,16 +143,92 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'uz'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Tashkent'
 
 USE_I18N = True
 
 USE_TZ = True
+LANGUAGES = [
+    ("uz", "O'zbekcha")
+]
 
+LOCALE_PATHS = [
+    BASE_DIR / "locale",
+]
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / "static"]   # ✅ project root/static
+STATIC_ROOT = BASE_DIR / "staticfiles"     # prod uchun collectstatic chiqadigan joy
+
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+
+
+# =========================
+# JAZZMIN (Admin UI theme)
+# =========================
+JAZZMIN_SETTINGS = {
+    "site_title": "UzbekBurger Admin",
+    "site_header": "UzbekBurger — Boshqaruv paneli",
+    "site_brand": "UzbekBurger",
+    "welcome_sign": "Boshqaruv paneliga xush kelibsiz",
+    "copyright": "UzbekBurger",
+    # Logos (static/)
+    "site_logo": "img/favicon.svg",
+    "login_logo": "img/favicon.svg",
+    "site_logo_classes": "img-circle",
+    "custom_css": "admin/ub_admin.css",
+    "changeform_format":"single",
+    # Top menu
+    "topmenu_links": [
+        {"name": "POS", "url": "/pos/"},
+        {"model": "auth.User"},
+    ],
+    # Sidebar menu icons (optional)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "core.branch": "fas fa-store",
+        "catalog.product": "fas fa-box",
+        "inventory.branchproduct": "fas fa-warehouse",
+        "inventory.stockimport": "fas fa-truck-loading",
+        "menu.food": "fas fa-hamburger",
+        "sales.order": "fas fa-receipt",
+        "finance.moneyaccount": "fas fa-cash-register",
+        "finance.cashtransaction": "fas fa-money-bill-wave",
+        "users.staffprofile": "fas fa-user-shield",
+    },
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "theme": "darkly",                 # bazaviy dark
+    "navbar": "navbar-dark",
+    "navbar_fixed": True,
+
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_fixed": True,
+
+    "accent": "accent-success",        # yashil accent
+    "brand_small_text": False,
+
+    "button_classes": {
+        "primary": "btn btn-success",
+        "secondary": "btn btn-outline-light",
+        "info": "btn btn-outline-info",
+        "warning": "btn btn-outline-warning",
+        "danger": "btn btn-outline-danger",
+        "success": "btn btn-success",
+    }
+}
+
+
+
+
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"

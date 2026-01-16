@@ -1,0 +1,111 @@
+{% load static %}
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}UzbekBurger{% endblock %}</title>
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+
+  <!-- Choices.js (select styling) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+
+  <!-- Project CSS -->
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+
+  {% block extra_head %}{% endblock %}
+
+  <script>
+    // Apply theme ASAP (prevents flash)
+    (function () {
+      try {
+        var t = localStorage.getItem("ub_theme") || "system";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="{% static 'img/favicon.svg' %}" alt="UzbekBurger">
+        <div>
+          <div class="t">UzbekBurger</div>
+          <div class="s">Kassa (POS) • Ombor • Moliya</div>
+        </div>
+      </div>
+
+      
+      <nav class="nav">
+        <a href="{% url 'sales:pos_orders' %}" class="{% if request.path|slice:':5' == '/pos/' %}active{% endif %}">Kassa (POS)</a>
+
+        {% if is_admin_like %}
+          <a href="{% url 'dashboard' %}" class="{% if request.path|slice:':11' == '/dashboard/' %}active{% endif %}">Bosh sahifa</a>
+          <a href="/admin/" target="_blank" rel="noopener" title="Admin panel (yangi oynada)">Admin panel</a>
+        {% endif %}
+      </nav>
+    
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-left" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <span class="pill">
+            Faol filial:
+            <strong>{% if active_branch %}{{ active_branch.name }}{% else %}Tanlanmagan{% endif %}</strong>
+          </span>
+
+          {% if is_admin_like %}
+            <a class="btn" href="{% url 'select_branch' %}">Filialni tanlash</a>
+          {% endif %}
+        </div>
+
+        <div class="topbar-right" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <span class="pill">
+            Foydalanuvchi: <strong>{{ request.user.username }}</strong>
+            {% if user_role %} • {{ user_role }}{% endif %}
+          </span>
+
+          <select id="themeSelect"
+                  class="control control-sm"
+                  data-choices
+                  data-choices-nosearch
+                  data-placeholder="Mavzu"
+                  onchange="setTheme(this.value)">
+            <option value="system">Tizim</option>
+            <option value="dark">Tungi</option>
+            <option value="light">Kunduzgi</option>
+          </select>
+
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="btn" type="submit">Chiqish</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="content">
+        {% if messages %}
+          <div class="notices" style="margin-bottom:12px; display:grid; gap:10px;">
+            {% for message in messages %}
+              <div class="notice notice-{{ message.tags|default:'info' }}">{{ message }}</div>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="{% static 'js/money.js' %}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <script src="{% static 'js/selects.js' %}"></script>
+  <script src="{% static 'js/theme.js' %}"></script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

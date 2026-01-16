@@ -1,26 +1,43 @@
+from __future__ import annotations
+
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
-from sales.models import Order, OrderItem, OrderPayment
-from menu.models import FoodItem
-from inventory.models import BranchProduct
+
 from finance.models import Direction, TxnType
 from finance.services import record_cash_txn
+from inventory.models import BranchProduct
+from menu.models import FoodItem
+from sales.models import Order, OrderItem, OrderPayment
 
 
 @transaction.atomic
 def recalc_order_totals(order: Order) -> None:
+    """Order total_amount va paid_amount ni qayta hisoblaydi (idempotent)."""
     o = Order.objects.select_for_update().get(pk=order.pk)
+
     agg = o.items.aggregate(s=Sum("line_total"))
     o.total_amount = int(agg["s"] or 0)
+
     paid = o.payments.aggregate(s=Sum("amount"))["s"] or 0
     o.paid_amount = int(paid)
+
     o.save(update_fields=["total_amount", "paid_amount"])
 
 
 @transaction.atomic
-def add_item(order: Order, food, qty: int) -> OrderItem:
+def add_item(order: Order, *, food, qty: int) -> OrderItem:
+    """DRAFT orderga item qo'shadi (bir xil food bo'lsa qty oshiradi)."""
     o = Order.objects.select_for_update().get(pk=order.pk)
+
+    # Muhim qoida:
+    #  - DRAFT bo'lmagan order edit qilinmaydi
+    #  - TOPSHIRILGAN (stock_applied) orderda item o'zgartirish mumkin emas (stock buziladi)
+    #  - YAKUNLANGAN (is_locked) orderda umuman edit yo'q
+    if o.is_locked:
+        raise ValueError("Order yakunlangan. Endi item qo'shib bo'lmaydi")
+    if o.is_delivered or o.stock_applied:
+        raise ValueError("Topshirilgan orderni tahrirlab bo'lmaydi")
     if o.status != Order.Status.DRAFT:
         raise ValueError("Only DRAFT orders can be edited")
 
@@ -28,40 +45,108 @@ def add_item(order: Order, food, qty: int) -> OrderItem:
     line_total = unit_price * int(qty)
 
     item, created = OrderItem.objects.get_or_create(
-        order=o, food=food,
+        order=o,
+        food=food,
         defaults={"qty": qty, "unit_price": unit_price, "line_total": line_total},
     )
     if not created:
         item.qty += int(qty)
-        item.line_total = item.unit_price * item.qty
+        item.line_total = int(item.unit_price) * int(item.qty)
         item.save(update_fields=["qty", "line_total"])
 
     recalc_order_totals(o)
     return item
 
 
-def _consume_stock_for_paid_order(order: Order) -> None:
-    # har bir order item -> food recipe -> branch stockdan yechamiz
+def _consume_stock_for_order(order: Order) -> None:
+    """FoodItem (recipe) bo'yicha BranchProduct.stock_qty dan yechadi."""
     items = order.items.select_related("food").all()
+
     for oi in items:
         recipe = FoodItem.objects.filter(food=oi.food).select_related("product")
         for ri in recipe:
             need_qty = ri.qty * oi.qty  # Decimal * int = Decimal
-            bp = (BranchProduct.objects
-                  .select_for_update()
-                  .get(branch=order.branch, product=ri.product))
 
-            # Strict: minusga tushirmaymiz
+            bp = (
+                BranchProduct.objects.select_for_update()
+                .filter(branch=order.branch, product=ri.product)
+                .first()
+            )
+
+            if bp is None:
+                raise ValueError(f"Stock topilmadi: {ri.product.name}. Avval import qiling.")
+
             if bp.stock_qty < need_qty:
-                raise ValueError(f"Stock yetarli emas: {ri.product.name} ({bp.stock_qty} < {need_qty})")
+                raise ValueError(
+                    f"Stock yetarli emas: {ri.product.name} ({bp.stock_qty} < {need_qty})"
+                )
 
             bp.stock_qty = bp.stock_qty - need_qty
             bp.save(update_fields=["stock_qty"])
 
 
 @transaction.atomic
-def pay_order(order: Order, *, account, amount: int, note: str | None = None, by_user) -> OrderPayment:
+def apply_stock_for_order_if_needed(order: Order) -> None:
+    """Order topshirilgan bo'lsa va stock hali yechilmagan bo'lsa, ingredientlarni yechadi."""
     o = Order.objects.select_for_update().get(pk=order.pk)
+
+    if o.stock_applied:
+        return
+
+    if not o.is_delivered:
+        raise ValueError("Stock faqat TOPSHIRILGAN (mijozga berilgan) order uchun yechiladi")
+
+    _consume_stock_for_order(o)
+    o.stock_applied = True
+    o.save(update_fields=["stock_applied"])
+
+
+@transaction.atomic
+def mark_delivered(order: Order, *, by_user=None) -> Order:
+    """Orderni 'topshirildi' deb belgilaydi va stockni (1 marta) yechadi."""
+    o = Order.objects.select_for_update().get(pk=order.pk)
+
+    if o.is_delivered:
+        # baribir stock_applied bo'lmasa, idempotent tarzda yechamiz
+        apply_stock_for_order_if_needed(o)
+        return o
+
+    o.is_delivered = True
+    o.delivered_at = timezone.now()
+    if by_user is not None:
+        o.delivered_by = by_user
+    o.save(update_fields=["is_delivered", "delivered_at", "delivered_by"])
+
+    apply_stock_for_order_if_needed(o)
+
+    # Agar order allaqachon to'liq to'langan bo'lsa -> yakunlaymiz
+    if o.status == Order.Status.PAID and not o.is_locked:
+        o.is_locked = True
+        o.locked_at = timezone.now()
+        if by_user is not None:
+            o.locked_by = by_user
+        o.save(update_fields=["is_locked", "locked_at", "locked_by"])
+    return o
+
+
+@transaction.atomic
+def pay_order(order: Order, *, account, amount: int, note: str | None = None, by_user) -> OrderPayment:
+    """Orderga to'lov yozadi va kassaga (cash_txn) tushum yozadi."""
+    o = Order.objects.select_for_update().get(pk=order.pk)
+
+    if o.is_locked:
+        raise ValueError("Order yakunlangan. Endi to'lov qo'shib bo'lmaydi")
+
+    # STAFF faqat o'z filialidagi orderni pay qila oladi
+    prof = getattr(by_user, "profile", None)
+    if prof and prof.is_active and prof.role == "staff":
+        if prof.branch_id != o.branch_id:
+            raise ValueError("Forbidden: boshqa filial orderini pay qila olmaysiz.")
+
+    # Account ham shu filialniki bo'lsin
+    if account.branch_id != o.branch_id:
+        raise ValueError("Payment account boshqa filialga tegishli.")
+
     if o.status == Order.Status.CANCELED:
         raise ValueError("Canceled order cannot be paid")
     if o.status == Order.Status.PAID:
@@ -93,26 +178,18 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None, by
     # totals update
     recalc_order_totals(o)
 
-    # agar to‘liq yopildi -> PAID + stock yechish
+    # agar to‘liq yopildi -> PAID
     if o.total_amount > 0 and o.paid_amount >= o.total_amount:
         o.status = Order.Status.PAID
         o.paid_at = timezone.now()
         o.paid_by = by_user
         o.save(update_fields=["status", "paid_at", "paid_by"])
 
+        # Agar topshirilgan bo'lsa -> yakunlaymiz
+        if o.is_delivered and not o.is_locked:
+            o.is_locked = True
+            o.locked_at = timezone.now()
+            o.locked_by = by_user
+            o.save(update_fields=["is_locked", "locked_at", "locked_by"])
+
     return p
-
-
-@transaction.atomic
-def apply_stock_for_order_if_needed(order: Order) -> None:
-    o = Order.objects.select_for_update().get(pk=order.pk)
-
-    if o.stock_applied:
-        return  # allaqachon yechilgan
-
-    if o.status != Order.Status.PAID:
-        raise ValueError("Stock faqat PAID order uchun yechiladi")
-
-    _consume_stock_for_paid_order(o)
-    o.stock_applied = True
-    o.save(update_fields=["stock_applied"])

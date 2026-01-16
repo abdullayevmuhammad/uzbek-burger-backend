@@ -1,0 +1,59 @@
+{% load static %}
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UzbekBurger — Kirish</title>
+
+  <link rel="icon" href="{% static 'img/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="brand">
+        <img src="{% static 'img/favicon.svg' %}" alt="UzbekBurger logo">
+        <div>
+          <p class="title">UzbekBurger</p>
+          <p class="subtitle">Kassa tizimi • Ombor • Moliya</p>
+        </div>
+      </div>
+
+      <h1>Hisobga kirish</h1>
+      <p class="muted">Username va parolingizni kiriting.</p>
+
+      {% if form.errors %}
+        <div class="alert">Login yoki parol noto‘g‘ri (yoki user aktiv emas).</div>
+      {% endif %}
+
+      <form method="post" autocomplete="on">
+        {% csrf_token %}
+
+        <div class="field">
+          <label for="id_username">Username</label>
+          <input type="text" name="username" id="id_username"
+                 value="{{ form.username.value|default_if_none:'' }}"
+                 autofocus required>
+        </div>
+
+        <div class="field">
+          <label for="id_password">Parol</label>
+          <input type="password" name="password" id="id_password" required>
+        </div>
+
+        {% if next %}
+          <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
+
+        <button class="btn" type="submit">Kirish</button>
+      </form>
+
+      <div class="footer">
+        <span>© {% now "Y" %} UzbekBurger</span>
+        <span><a href="/admin/">Admin</a></span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% load static %}
+{% load money %}
+
+{% block title %}Yangi buyurtma{% endblock %}
+
+{% block content %}
+<div class="pos-page-head">
+  <div>
+    <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
+    <h1 class="pos-h1">Yangi buyurtma</h1>
+    <div class="muted" style="margin-top:6px;">Menyudan taomlarni tanlang. O'ng tomonda chek real-time yangilanadi.</div>
+  </div>
+
+  <div class="pos-head-actions">
+    <a class="btn" href="{% url 'sales:pos_orders' %}">← Buyurtmalar</a>
+  </div>
+</div>
+
+<div class="pos-create-wrap">
+  <div class="pos-menu-col">
+    <div class="pos-menu-top">
+      <div class="pos-tabs" id="posTabs">
+        <button type="button" class="pos-tab active" data-type="ALL">Barchasi</button>
+        <button type="button" class="pos-tab" data-type="{{ FoodType.FASTFOOD }}">Fastfood</button>
+        <button type="button" class="pos-tab" data-type="{{ FoodType.DRINK }}">Ichimliklar</button>
+        <button type="button" class="pos-tab" data-type="{{ FoodType.SET }}">Setlar</button>
+      </div>
+
+      <div class="pos-search">
+        <input class="control" id="posSearch" placeholder="Izlash... (nom bo‘yicha)">
+      </div>
+    </div>
+
+    <div class="mb-grid pos-menu-grid" id="posMenuGrid">
+      {% for f in foods %}
+        <button class="mb-card pos-food-card"
+                type="button"
+                data-food-id="{{ f.id }}"
+                data-type="{{ f.type }}">
+          <div class="mb-img">
+            {% if f.image %}
+              <img src="{{ f.image.url }}" alt="{{ f.name }}">
+            {% else %}
+              <div class="mb-img-ph">Rasm yo‘q</div>
+            {% endif %}
+          </div>
+
+          <div class="mb-name">{{ f.name }}</div>
+
+          <div class="mb-price">
+            <span class="mb-price-chip">{{ f.sell_price|som }}</span>
+          </div>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  <aside class="pos-receipt-col">
+    <form method="post" id="posForm" class="pos-receipt">
+      {% csrf_token %}
+      <input type="hidden" name="items_json" id="items_json" value="[]">
+
+      <div class="pos-receipt-head">
+        <div class="pos-card-title">Chek</div>
+        <button type="button" class="btn btn-sm btn-ghost" id="clearCart">Tozalash</button>
+      </div>
+
+      <div class="pos-section">
+        <div class="pos-section-title">Buyurtma turi</div>
+        <div class="pos-seg">
+          {% for val,label in OrderType.choices %}
+            <label class="pos-seg-item">
+              <input type="radio" name="order_type" value="{{ val }}" {% if forloop.first %}checked{% endif %}>
+              <span>{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="pos-section">
+        <div class="pos-toggles">
+          <label class="pos-toggle">
+            <input type="checkbox" id="is_paid" name="is_paid" value="1">
+            <span>To‘langan</span>
+          </label>
+
+          <label class="pos-toggle">
+            <input type="checkbox" id="is_delivered" name="is_delivered" value="1">
+            <span>Topshirildi</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="pos-section" id="payBox" style="display:none;">
+        <div class="pos-section-title">To‘lov</div>
+        <div class="pos-field">
+          <label>Kassa</label>
+          <select class="control" name="account_id">
+            <option value="">Tanlang...</option>
+            {% for a in accounts %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="pos-field">
+          <label>Summa</label>
+          <input class="control" type="number" min="0" name="paid_amount" id="paid_amount" placeholder="Jami summa">
+        </div>
+      </div>
+
+      <div class="pos-lines" id="receiptLines">
+        <div class="muted" id="emptyCartHint" style="padding:12px;">Hozircha taom tanlanmagan.</div>
+      </div>
+
+      <div class="pos-totals">
+        <div class="pos-total-row">
+          <span class="muted">Jami</span>
+          <span class="pos-total-amt" id="grandTotal">0 so‘m</span>
+        </div>
+      </div>
+
+      <div class="pos-actions">
+        <button class="btn btn-primary" id="submitOrder" type="submit" disabled>Buyurtmani saqlash</button>
+      </div>
+    </form>
+  </aside>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ---- Data
+  const FOODS = {{ foods_json|safe }};
+  const foodsById = new Map(FOODS.map(f => [f.id, f]));
+
+  function moneyUZS(n){
+    try{
+      const x = Number(n || 0);
+      return x.toLocaleString("ru-RU") + " so‘m";
+    }catch(e){
+      return (n ?? 0) + " so‘m";
+    }
+  }
+
+  // ---- Cart (key = foodId)
+  const cart = new Map();
+
+  function addToCart(foodId){
+    const f = foodsById.get(foodId);
+    if(!f) return;
+
+    const current = cart.get(foodId) || {foodId, qty: 0};
+    current.qty += 1;
+    cart.set(foodId, current);
+    renderReceipt();
+  }
+
+  function setQty(foodId, qty){
+    const it = cart.get(foodId);
+    if(!it) return;
+    it.qty = qty;
+    if(it.qty <= 0) cart.delete(foodId);
+    else cart.set(foodId, it);
+    renderReceipt();
+  }
+
+  function clearCart(){
+    cart.clear();
+    renderReceipt();
+  }
+
+  // ---- Receipt render
+  function getLinePrice(item){
+    const f = foodsById.get(item.foodId);
+    if(!f) return 0;
+    return Number(f.sell_price);
+  }
+
+  function getLineName(item){
+    const f = foodsById.get(item.foodId);
+    return f ? f.name : "";
+  }
+
+  function renderReceipt(){
+    const lines = document.getElementById("receiptLines");
+    const emptyHint = document.getElementById("emptyCartHint");
+    const submitBtn = document.getElementById("submitOrder");
+    const grandEl = document.getElementById("grandTotal");
+    const itemsInput = document.getElementById("items_json");
+    const paidAmountInput = document.getElementById("paid_amount");
+
+    lines.querySelectorAll(".pos-line").forEach(n => n.remove());
+
+    const arr = Array.from(cart.values());
+
+    if(arr.length === 0){
+      emptyHint.style.display = "block";
+      submitBtn.disabled = true;
+      grandEl.textContent = moneyUZS(0);
+      itemsInput.value = "[]";
+      if(paidAmountInput && document.getElementById("is_paid").checked){
+        paidAmountInput.value = "";
+      }
+      return;
+    }
+
+    emptyHint.style.display = "none";
+    submitBtn.disabled = false;
+
+    let total = 0;
+    const payload = [];
+
+    for(const it of arr){
+      const unit = getLinePrice(it);
+      const line = unit * it.qty;
+      total += line;
+
+      payload.push({food: it.foodId, qty: it.qty});
+
+      const row = document.createElement("div");
+      row.className = "pos-line";
+      row.dataset.foodId = it.foodId;
+
+      row.innerHTML = `
+        <div class="pos-line-main">
+          <div class="pos-line-name">${getLineName(it)}</div>
+          <div class="muted">${it.qty} × ${moneyUZS(unit)}</div>
+        </div>
+        <div class="pos-qty">
+          <button type="button" class="qty-btn" data-act="minus">−</button>
+          <div class="qty-num">${it.qty}</div>
+          <button type="button" class="qty-btn" data-act="plus">+</button>
+        </div>
+        <div class="pos-line-total"><b>${moneyUZS(line)}</b></div>
+      `;
+
+      row.addEventListener("click", (e) => {
+        const btn = e.target.closest("button.qty-btn");
+        if(!btn) return;
+        const act = btn.dataset.act;
+        if(act === "minus") setQty(it.foodId, it.qty - 1);
+        if(act === "plus") setQty(it.foodId, it.qty + 1);
+      });
+
+      lines.appendChild(row);
+    }
+
+    grandEl.textContent = moneyUZS(total);
+    itemsInput.value = JSON.stringify(payload);
+
+    // Paid amount auto-fill
+    if(paidAmountInput && document.getElementById("is_paid").checked){
+      if(!paidAmountInput.dataset.touched){
+        paidAmountInput.value = total;
+      }
+    }
+  }
+
+  // ---- Tabs filter (client-side)
+  function applyFilters(){
+    const activeType = document.querySelector(".pos-tab.active")?.dataset.type || "ALL";
+    const q = (document.getElementById("posSearch").value || "").toLowerCase().trim();
+
+    document.querySelectorAll(".pos-food-card").forEach(card => {
+      const type = card.dataset.type;
+      const name = card.querySelector(".mb-name")?.textContent?.toLowerCase() || "";
+      const matchType = (activeType === "ALL") || (type === activeType);
+      const matchQ = !q || name.includes(q);
+      card.style.display = (matchType && matchQ) ? "" : "none";
+    });
+  }
+
+  document.getElementById("posTabs").addEventListener("click", (e) => {
+    const b = e.target.closest(".pos-tab");
+    if(!b) return;
+    document.querySelectorAll(".pos-tab").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    applyFilters();
+  });
+
+  document.getElementById("posSearch").addEventListener("input", applyFilters);
+
+  // ---- Click food card
+  document.getElementById("posMenuGrid").addEventListener("click", (e) => {
+    const card = e.target.closest(".pos-food-card");
+    if(!card) return;
+    addToCart(card.dataset.foodId);
+  });
+
+  // ---- Paid toggle -> show/hide pay box
+  const isPaid = document.getElementById("is_paid");
+  const payBox = document.getElementById("payBox");
+  const paidAmountInput = document.getElementById("paid_amount");
+
+  isPaid.addEventListener("change", () => {
+    payBox.style.display = isPaid.checked ? "" : "none";
+    if(isPaid.checked){
+      renderReceipt(); // auto fill
+    }else{
+      if(paidAmountInput){
+        paidAmountInput.value = "";
+        delete paidAmountInput.dataset.touched;
+      }
+    }
+  });
+
+  if(paidAmountInput){
+    paidAmountInput.addEventListener("input", () => {
+      paidAmountInput.dataset.touched = "1";
+    });
+  }
+
+  // ---- Clear cart
+  document.getElementById("clearCart").addEventListener("click", clearCart);
+
+  // ---- Initial
+  applyFilters();
+  renderReceipt();
+
+  // ---- Prevent submit with empty cart
+  document.getElementById("posForm").addEventListener("submit", (e) => {
+    if(cart.size === 0){
+      e.preventDefault();
+      alert("Kamida bitta taom tanlang.");
+    }
+  });
+</script>
+{% endblock %}

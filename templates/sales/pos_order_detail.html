@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block title %}Buyurtma{% endblock %}
+
+{% block content %}
+<div class="pos-page-head">
+  <div>
+    <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
+    <h1 class="pos-h1">Buyurtma <span class="mono">{{ order.id|stringformat:"s"|slice:":8" }}</span></h1>
+    <div class="muted" style="margin-top:6px;">
+      {{ order.created_at|date:"d.m.Y H:i" }} • {{ order.get_order_type_display }}
+    </div>
+  </div>
+
+  <div class="pos-head-actions" style="gap:10px; flex-wrap:wrap;">
+    <a class="btn" href="{% url 'sales:pos_orders' %}">← Orqaga</a>
+    <a class="btn btn-primary" href="{% url 'sales:pos_order_create' %}">+ Yangi buyurtma</a>
+  </div>
+</div>
+
+<div class="pos-two-col">
+  <div class="pos-card">
+    <div class="pos-card-title">Chek</div>
+
+    <div class="pos-status-row">
+      <div>
+        <div class="muted">Topshirilgan</div>
+        {% if order.is_delivered %}
+          <div class="badge badge-ok">Ha</div>
+        {% else %}
+          <div class="badge badge-warn">Yo‘q</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="muted">To‘lov</div>
+        {% if order.is_fully_paid %}
+          <div class="badge badge-ok">To‘langan</div>
+        {% elif order.paid_amount %}
+          <div class="badge badge-warn">Qisman</div>
+        {% else %}
+          <div class="badge badge-warn">To‘lanmagan</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="muted">Stock</div>
+        {% if order.stock_applied %}
+          <div class="badge badge-ok">Yechilgan</div>
+        {% else %}
+          <div class="badge badge-warn">Yechilmagan</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="pos-lines">
+      {% for it in items %}
+        <div class="pos-line">
+          <div class="pos-line-main">
+            <div class="pos-line-name">
+              {{ it.food.name }}
+            </div>
+            <div class="muted">{{ it.qty }} × {{ it.unit_price|som }}</div>
+          </div>
+          <div class="pos-line-total"><b>{{ it.line_total|som }}</b></div>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="pos-totals">
+      <div class="pos-total-row">
+        <span class="muted">Jami</span>
+        <span class="pos-total-amt">{{ order.total_amount|som }}</span>
+      </div>
+      <div class="pos-total-row">
+        <span class="muted">To‘langan</span>
+        <span><b>{{ order.paid_amount|som }}</b></span>
+      </div>
+      <div class="pos-total-row">
+        <span class="muted">Qoldiq</span>
+        <span><b>{{ due|som }}</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pos-card">
+    <div class="pos-card-title">Amallar</div>
+
+    {% if order.is_locked %}
+      <div class="badge badge-ok" style="margin-bottom:12px;">Buyurtma yakunlangan (LOCK)</div>
+      <div class="muted" style="margin-bottom:12px;">Topshirish/to'lov ma'lumotlari yakunlangan, endi tahrirlab bo'lmaydi.</div>
+    {% endif %}
+
+    {% if not order.is_locked and not order.is_delivered %}
+      <form method="post" action="{% url 'sales:pos_order_deliver' order.pk  %}" style="margin-bottom:12px;">
+        {% csrf_token %}
+        <button class="btn btn-primary" type="submit">Topshirildi (stock yechilsin)</button>
+      </form>
+    {% elif not order.is_locked %}
+      <div class="muted" style="margin-bottom:12px;">Order allaqachon topshirilgan.</div>
+    {% endif %}
+
+    {% if not order.is_locked and due > 0 %}
+      <form method="post" action="{% url 'sales:pos_order_pay' order.pk  %}" class="pos-pay-form">
+        {% csrf_token %}
+        <div class="pos-field">
+          <label>Kassa</label>
+          <select class="control" name="account_id" required>
+            <option value="">Tanlang...</option>
+            {% for a in accounts %}
+              <option value="{{ a.id }}">{{ a.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="pos-field">
+          <label>Summa</label>
+          <input class="control" type="number" min="1" name="amount" value="{{ due }}" required>
+        </div>
+
+        <div class="pos-field">
+          <label>Izoh (ixtiyoriy)</label>
+          <input class="control" type="text" name="note" placeholder="Masalan: naqd / karta">
+        </div>
+
+        <button class="btn btn-primary" type="submit">To‘lov qabul qilish</button>
+      </form>
+    {% elif due <= 0 %}
+      <div class="badge badge-ok">Buyurtma to‘liq to‘langan.</div>
+    {% endif %}
+
+    <hr class="hr">
+
+    <div class="pos-card-title" style="margin-top:8px;">To‘lovlar tarixi</div>
+    <div class="pos-payments">
+      {% for p in payments %}
+        <div class="pos-payment">
+          <div>
+            <div><b>{{ p.amount|som }}</b> • {{ p.account.name }}</div>
+            <div class="muted">{{ p.created_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </div>
+      {% empty %}
+        <div class="muted">To‘lovlar yo‘q.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

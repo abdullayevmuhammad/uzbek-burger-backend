@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Filialni tanlash — UzbekBurger{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Filialni tanlang</h2>
+      <div class="hint">Admin / Owner / Manager foydalanuvchilar ishlaydigan filialni tanlaydi.</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a class="btn" href="{% url 'dashboard' %}">Orqaga</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    {% for b in branches %}
+      <div class="card" style="grid-column: span 4;">
+        <h3 style="margin-bottom:6px;">{{ b.name }}</h3>
+        <p class="muted" style="margin-bottom:12px;">
+          {% if b.address %}{{ b.address }}{% else %}Manzil ko‘rsatilmagan{% endif %}
+        </p>
+
+        <form method="post" style="display:flex; gap:10px; align-items:center;">
+          {% csrf_token %}
+          <input type="hidden" name="branch_id" value="{{ b.id }}">
+          <button class="btn btn-primary" type="submit">Tanlash</button>
+        </form>
+      </div>
+    {% empty %}
+      <div class="card" style="grid-column: span 12;">
+        <h3>Filial topilmadi</h3>
+        <p class="muted">Avval filial(lar)ni yarating.</p>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% load money %}
+{% block title %}
+  Mahsulot — {{ product.name }}
+{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Mahsulot: {{ product.name }}</h2>
+      <div class="hint">SKU: {{ product.sku|default:'—' }} • Shtrix-kod: {{ product.barcode|default:'—' }} • Birlik: {{ product.count_type }}</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn" href="{% url 'stock_list' %}">Orqaga</a>
+    </div>
+  </div>
+
+  {% include 'inventory/_tabs.html' %}
+
+  <div class="grid" style="margin-bottom:12px;">
+    <div class="card" style="grid-column: span 4;">
+        <h3>Qoldiq</h3>
+        <p>
+          Hozirgi qoldiq: <b>{{ bp.stock_qty|qty }} <span class="muted">{{ product.get_count_type_display|default:product.count_type }}</span></b>
+      </p>
+      <p>
+        O‘rtacha tannarx: <b>{{ bp.avg_unit_cost|som }}</b> so‘m
+      </p>
+      <p>
+        Oxirgi tannarx: <b>{{ bp.last_unit_cost|som }}</b> so‘m
+      </p>
+    </div>
+
+    <div class="card" style="grid-column: span 8;">
+      <h3>Import bo‘yicha yig‘indi</h3>
+      <p>
+        Jami import miqdori: <b>{{ total_import_qty|qty }}</b>
+      </p>
+      <p>
+        Jami import qiymati: <b>{{ total_import_cost|som }}</b> so‘m
+      </p>
+      <p style="color:var(--muted);margin-top:8px;">Keyin: sotuv statistikasi (necha marta sotilgani, tushum, foyda) shu sahifaga qo‘shiladi.</p>
+    </div>
+  </div>
+
+  <div class="card" style="grid-column: span 12; padding:0; overflow:hidden;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Import vaqti</th>
+          <th>Import holati</th>
+          <th style="text-align:right;">Miqdor</th>
+          <th style="text-align:right;">Birlik tannarx</th>
+          <th style="text-align:right;">Jami</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in import_rows %}
+          <tr>
+            <td style="white-space:nowrap;">{{ r.import.created_at|date:'Y-m-d H:i' }}</td>
+            <td>
+              {% if r.import.status == 'POSTED' %}
+                <span class="badge badge-ok">POST QILINGAN</span>
+              {% else %}
+                <span class="badge badge-warn">QORALAMA</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">{{ r.qty }}</td>
+            <td style="text-align:right;">{{ r.unit_cost }}</td>
+            <td style="text-align:right;">{{ r.line_total_cost }}</td>
+            <td style="text-align:right;">
+              <a class="btn" href="{% url 'import_detail' r.import.id %}">Import</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="6" style="color:var(--muted);padding:14px;">Bu mahsulot bo‘yicha import yozuvlari yo‘q.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

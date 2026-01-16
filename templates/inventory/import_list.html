@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load querystring money %}
+
+{% block title %}Ombor — Mahsulot importlari{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Ombor: Mahsulot importlari</h2>
+      <div class="hint">Import hujjatlari ro‘yxati (Qoralama / POST qilingan).</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn btn-primary" href="{% url 'import_create' %}">Yangi import</a>
+    </div>
+  </div>
+
+  {% include "inventory/_tabs.html" %}
+
+  <form method="get" style="display:grid;grid-template-columns:2fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px;">
+    <div>
+      <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Qidirish</label>
+      <input class="control" name="q" value="{{ q }}" placeholder="Izoh bo‘yicha qidirish">
+    </div>
+    <div>
+      <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Holat</label>
+      <select class="control" name="status" data-choices data-choices-nosearch data-placeholder="Holat...">
+        <option value="">Hammasi</option>
+        <option value="DRAFT" {% if status == "DRAFT" %}selected{% endif %}>Qoralama</option>
+        <option value="POSTED" {% if status == "POSTED" %}selected{% endif %}>POST qilingan</option>
+      </select>
+    </div>
+    <button class="btn" type="submit">Qidirish</button>
+  </form>
+
+  <div class="card" style="grid-column: span 12; padding:0; overflow:hidden;">
+    <table class="table">
+      <thead>
+        <tr>
+          {% with o=current_o %}
+            <th style="white-space:nowrap;">
+              {% if o == "time" %}<a href="{% qs o='-time' %}">Vaqt ▲</a>
+              {% elif o == "-time" %}<a href="{% qs o='time' %}">Vaqt ▼</a>
+              {% else %}<a href="{% qs o='-time' %}">Vaqt</a>{% endif %}
+            </th>
+            <th>
+              {% if o == "note" %}<a href="{% qs o='-note' %}">Izoh ▲</a>
+              {% elif o == "-note" %}<a href="{% qs o='note' %}">Izoh ▼</a>
+              {% else %}<a href="{% qs o='note' %}">Izoh</a>{% endif %}
+            </th>
+            <th style="white-space:nowrap;">
+              {% if o == "status" %}<a href="{% qs o='-status' %}">Holat ▲</a>
+              {% elif o == "-status" %}<a href="{% qs o='status' %}">Holat ▼</a>
+              {% else %}<a href="{% qs o='status' %}">Holat</a>{% endif %}
+            </th>
+            <th style="text-align:right;">
+              {% if o == "sum" %}<a href="{% qs o='-sum' %}">Jami qiymat ▲</a>
+              {% elif o == "-sum" %}<a href="{% qs o='sum' %}">Jami qiymat ▼</a>
+              {% else %}<a href="{% qs o='sum' %}">Jami qiymat</a>{% endif %}
+            </th>
+            <th></th>
+          {% endwith %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for imp in imports %}
+          <tr>
+            <td style="white-space:nowrap;">{{ imp.created_at|date:"Y-m-d H:i" }}</td>
+            <td>{{ imp.note|default:"—" }}</td>
+            <td>
+              {% if imp.status == "POSTED" %}
+                <span class="badge badge-ok">POST QILINGAN</span>
+              {% else %}
+                <span class="badge badge-warn">QORALAMA</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">{{ imp.total_cost|default:0|som }}</td>
+            <td style="text-align:right;">
+              <a class="btn" href="{% url 'import_detail' imp.id %}">Ochish</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="color:var(--muted);padding:14px;">
+              Importlar topilmadi.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

@@ -28,6 +28,13 @@ def post_stock_import(stock_import: StockImport, *, by_user=None) -> None:
     Idempotent: qayta chaqirilsa 2 marta qo'shmaydi.
     """
     imp = StockImport.objects.select_for_update().get(pk=stock_import.pk)
+    # STAFF faqat o'z filialidagi importni post qila oladi
+    if by_user is not None:
+        prof = getattr(by_user, "profile", None)
+        if prof and prof.is_active and prof.role == "staff":
+            if prof.branch_id != imp.branch_id:
+                raise ValueError("Forbidden: boshqa filial importini POST qila olmaysiz.")
+
 
     if imp.status == StockImport.Status.POSTED:
         return  # idempotent
@@ -102,4 +109,3 @@ def post_stock_import(stock_import: StockImport, *, by_user=None) -> None:
     imp.posted_by = by_user
     imp.posted_at = timezone.now()
     imp.save(update_fields=["status", "posted_by", "posted_at"])
-    imp.created_by = by_user

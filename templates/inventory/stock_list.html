@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% load querystring money %}
+{% block title %}Ombor — Mahsulotlar{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Ombor: Mahsulotlar</h2>
+      <div class="hint">Bu yerda filial bo‘yicha barcha mahsulot qoldiqlari ko‘rinadi.</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn btn-primary" href="{% url 'product_create' %}">Yangi mahsulot</a>
+    </div>
+  </div>
+
+  {% include "inventory/_tabs.html" %}
+
+  <form method="get" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end;margin-bottom:12px;">
+    <div>
+      <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Qidirish</label>
+      <input class="control" name="q" value="{{ q }}" placeholder="Nom / SKU / shtrix-kod">
+    </div>
+    <div>
+      <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">O‘lchov</label>
+      <select class="control" name="ct" data-choices data-choices-nosearch data-placeholder="O‘lchov...">
+        <option value="">Hammasi</option>
+        <option value="pcs" {% if ct == "pcs" %}selected{% endif %}>Dona</option>
+        <option value="kg" {% if ct == "kg" %}selected{% endif %}>Kg</option>
+        <option value="l" {% if ct == "l" %}selected{% endif %}>L</option>
+        <option value="gr" {% if ct == "gr" %}selected{% endif %}>Gr</option>
+        <option value="ml" {% if ct == "ml" %}selected{% endif %}>Ml</option>
+      </select>
+    </div>
+    <div>
+      <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Min qoldiq</label>
+      <input class="control" name="min_qty" value="{{ min_qty }}" placeholder="0">
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;">
+        <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Max qoldiq</label>
+        <input class="control" name="max_qty" value="{{ max_qty }}" placeholder="ixtiyoriy">
+      </div>
+      <button class="btn" type="submit" style="align-self:end;">Qidirish</button>
+    </div>
+  </form>
+
+  <div class="card" style="grid-column: span 12; padding:0; overflow:hidden;">
+    <table class="table">
+      <thead>
+        <tr>
+          {% with o=current_o %}
+            <th>
+              {% if o == "name" %}<a href="{% qs o='-name' %}">Mahsulot ▲</a>
+              {% elif o == "-name" %}<a href="{% qs o='name' %}">Mahsulot ▼</a>
+              {% else %}<a href="{% qs o='name' %}">Mahsulot</a>{% endif %}
+            </th>
+            <th>Birlik</th>
+            <th style="text-align:right;">
+              {% if o == "qty" %}<a href="{% qs o='-qty' %}">Qoldiq ▲</a>
+              {% elif o == "-qty" %}<a href="{% qs o='qty' %}">Qoldiq ▼</a>
+              {% else %}<a href="{% qs o='qty' %}">Qoldiq</a>{% endif %}
+            </th>
+            <th style="text-align:right;">
+              {% if o == "avg" %}<a href="{% qs o='-avg' %}">O‘rtacha tannarx ▲</a>
+              {% elif o == "-avg" %}<a href="{% qs o='avg' %}">O‘rtacha tannarx ▼</a>
+              {% else %}<a href="{% qs o='avg' %}">O‘rtacha tannarx</a>{% endif %}
+            </th>
+            <th style="text-align:right;">
+              {% if o == "last" %}<a href="{% qs o='-last' %}">Oxirgi tannarx ▲</a>
+              {% elif o == "-last" %}<a href="{% qs o='last' %}">Oxirgi tannarx ▼</a>
+              {% else %}<a href="{% qs o='last' %}">Oxirgi tannarx</a>{% endif %}
+            </th>
+          {% endwith %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for bp in items %}
+          <tr>
+            <td style="font-weight:600;">
+              <a style="text-decoration: underline;" href="{% url 'product_detail' bp.product.id %}">{{ bp.product.name }}</a>
+              <div style="color:var(--muted);font-size:12px;margin-top:2px;">
+                {% if bp.product.sku %}SKU: {{ bp.product.sku }}{% endif %}
+                {% if bp.product.barcode %} • Shtrix: {{ bp.product.barcode }}{% endif %}
+              </div>
+            </td>
+            <td style="color:var(--muted);">{{ bp.product.get_count_type_display }}</td>
+            <td style="text-align:right;">{{ bp.stock_qty|qty }}</td>
+            <td style="text-align:right;">{{ bp.avg_unit_cost|som }}</td>
+            <td style="text-align:right;">{{ bp.last_unit_cost|som }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" style="color:var(--muted);padding:14px;">
+              Mahsulotlar topilmadi.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block title %}Menyu — Taomlar{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Menyu: taomlar</h2>
+      <div class="hint">Taomlarni qo‘shish, tahrirlash va o‘chirish.</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a class="btn" href="{% url 'menu_board' %}">Menu board</a>
+      <a class="btn btn-primary" href="{% url 'menu_food_add' %}">+ Menyuga qo‘shish</a>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0; overflow:hidden;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nomi</th>
+          <th>Type</th>
+          <th>Kategoriya</th>
+          <th style="text-align:right;">Narx</th>
+          <th style="text-align:right;">Holat</th>
+          <th style="text-align:right;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in foods %}
+          <tr>
+            <td style="font-weight:600;">{{ f.name }}</td>
+            <td class="muted">{{ f.type }}</td>
+            <td class="muted">{% if f.category %}{{ f.category.name }}{% else %}—{% endif %}</td>
+            <td style="text-align:right;">{{ f.sell_price|default:0|som }}</td>
+            <td style="text-align:right;">
+              {% if f.is_active %}
+                <span class="badge badge-ok">Aktiv</span>
+              {% else %}
+                <span class="badge badge-warn">Noaktiv</span>
+              {% endif %}
+            </td>
+            <td style="text-align:right;">
+              <a class="btn" href="{% url 'menu_food_edit' f.id %}">Tahrirlash</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" style="padding:14px; color:var(--muted);">Hali taom yo‘q.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Yangi taom{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Yangi taom</h2>
+      <div class="hint">Menyu uchun taom qo‘shish. Variantlar bo‘lsa, keyin tahrirlash sahifasida qo‘shasiz.</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn" href="{% url 'menu_food_list' %}">Orqaga</a>
+    </div>
+  </div>
+
+  <div class="card form-card">
+    <form method="post" enctype="multipart/form-data" class="form">
+      {% csrf_token %}
+
+      {% if form.non_field_errors %}
+        <div class="notice notice-error">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="form-grid">
+        <div class="fg">
+          <label for="{{ form.type.id_for_label }}">Type</label>
+          {{ form.type }}
+          {% if form.type.errors %}<div class="notice notice-error">{{ form.type.errors }}</div>{% endif %}
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.category.id_for_label }}">Kategoriya</label>
+          {{ form.category }}
+          {% if form.category.errors %}<div class="notice notice-error">{{ form.category.errors }}</div>{% endif %}
+        </div>
+
+        <div class="fg span-2">
+          <label for="{{ form.name.id_for_label }}">Nomi</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="notice notice-error">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.sell_price.id_for_label }}">Narx (so‘m)</label>
+          {{ form.sell_price }}
+          <div class="help">Narx taomning sell_price maydonidan olinadi.</div>
+          {% if form.sell_price.errors %}<div class="notice notice-error">{{ form.sell_price.errors }}</div>{% endif %}
+        </div>
+
+        <div class="fg">
+          <label for="{{ form.sort_order.id_for_label }}">Tartib (sort)</label>
+          {{ form.sort_order }}
+          {% if form.sort_order.errors %}<div class="notice notice-error">{{ form.sort_order.errors }}</div>{% endif %}
+        </div>
+
+        <div class="fg span-2">
+          <label for="{{ form.image.id_for_label }}">Rasm</label>
+          {{ form.image }}
+          {% if form.image.errors %}<div class="notice notice-error">{{ form.image.errors }}</div>{% endif %}
+        </div>
+
+        <div class="check-row span-2">
+          {{ form.is_active }}
+          <label for="{{ form.is_active.id_for_label }}">Aktiv (menu’da ko‘rinsin)</label>
+          {% if form.is_active.errors %}<div class="notice notice-error">{{ form.is_active.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <a class="btn" href="{% url 'menu_food_list' %}">Bekor</a>
+        <button class="btn btn-primary" type="submit">Saqlash</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

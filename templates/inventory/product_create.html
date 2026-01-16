@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Yangi mahsulot{% endblock %}
+
+{% block content %}
+  <div class="toolbar">
+    <div class="left">
+      <h2>Yangi mahsulot</h2>
+      <div class="hint">Omborga mahsulot qo‘shish (keyin import orqali qoldiq kiradi).</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a class="btn" href="{% url 'stock_list' %}">Orqaga</a>
+    </div>
+  </div>
+
+  {% include "inventory/_tabs.html" %}
+
+  <div class="card" style="grid-column: span 12;">
+    <form method="post">
+      {% csrf_token %}
+
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;">
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Mahsulot nomi</label>
+          {{ form.name }}
+        </div>
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">O‘lchov birligi</label>
+          {{ form.count_type }}
+        </div>
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Faol</label>
+          {{ form.is_active }}
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">SKU</label>
+          {{ form.sku }}
+        </div>
+        <div>
+          <label style="display:block;margin:0 0 6px;color:var(--muted);font-size:13px;">Shtrix-kod</label>
+          {{ form.barcode }}
+        </div>
+      </div>
+
+      {% if form.errors %}
+        <div class="notice notice-error" style="margin-top:12px;">Xatolik bor: maydonlarni tekshiring (unique SKU/barcode bo‘lishi mumkin).</div>
+      {% endif %}
+
+      <div style="margin-top:14px;display:flex;gap:10px;">
+        <button class="btn btn-primary" type="submit">Saqlash</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}
