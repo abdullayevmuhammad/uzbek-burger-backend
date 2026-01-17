@@ -1,0 +1,41 @@
+services:
+  web:
+    build: .
+    container_name: uzbekburger_web
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - media:/app/media
+      - staticfiles:/app/staticfiles
+    command: >
+      sh -c "
+      echo 'Waiting for Postgres...';
+      until python -c \"import socket; s=socket.socket(); s.settimeout(1); s.connect(('db', 5432))\" 2>/dev/null; do
+        sleep 1;
+      done;
+      echo 'Postgres is up!';
+      python manage.py migrate &&
+      python manage.py collectstatic --noinput &&
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 60
+      "
+
+  db:
+    image: postgres:16
+    container_name: uzbekburger_db
+    environment:
+      POSTGRES_DB: uzbekburger
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata:
+  media:
+  staticfiles:
