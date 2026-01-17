@@ -32,8 +32,8 @@ ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost
 CSRF_TRUSTED_ORIGINS = ["http://64.227.156.11:8000"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = False
+SESSION_COOKIE_SECURE = False
 # Application definition
 
 # Optional dependency: django-jazzmin (Admin UI theme)
