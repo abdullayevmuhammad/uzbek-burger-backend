@@ -25,20 +25,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG")
+DEBUG = os.getenv("DJANGO_DEBUG", "0").lower() in ("1", "true", "yes", "on")
+
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 # CSRF_TRUSTED_ORIGINS = ["http://64.227.156.11:8000"]
+
+
 CSRF_TRUSTED_ORIGINS = [
     "https://pos.uzbekburger.uz",
     "https://uzbekburger.uz",
+    "http://pos.uzbekburger.uz",
+    "http://uzbekburger.uz",
 ]
+
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SECURE = True
+USE_HTTPS = os.getenv("DJANGO_USE_HTTPS", "0").lower() in ("1","true","yes","on")
+CSRF_COOKIE_SECURE = USE_HTTPS
+SESSION_COOKIE_SECURE = USE_HTTPS
 # Application definition
 
 # Optional dependency: django-jazzmin (Admin UI theme)
