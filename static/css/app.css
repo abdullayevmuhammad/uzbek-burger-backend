@@ -1265,3 +1265,16 @@ input[type="submit"].btn:disabled {
 :root:not([data-theme="light"]) .mb-name{
   color: #e5e7eb !important;
 }
+/* === POS image sizing: contain, lekin kattaroq ko'rinsin === */
+.mb-img{
+  aspect-ratio: 1 / 1;
+  min-height: 120px;        /* kichrayib ketmasin */
+}
+
+.mb-img-main{
+  object-fit: contain !important;
+  padding: 0 !important;    /* kichraytirayotgan bo'lsa olib tashlaymiz */
+  transform: scale(1.12);   /* biroz kattalashtiramiz */
+  transform-origin: center;
+}
+
