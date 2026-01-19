@@ -29,11 +29,16 @@ DEBUG = os.getenv("DJANGO_DEBUG")
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
-CSRF_TRUSTED_ORIGINS = ["http://64.227.156.11:8000"]
+# CSRF_TRUSTED_ORIGINS = ["http://64.227.156.11:8000"]
+CSRF_TRUSTED_ORIGINS = [
+    "https://pos.uzbekburger.uz",
+    "https://uzbekburger.uz",
+]
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-CSRF_COOKIE_SECURE = False
-SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
 # Application definition
 
 # Optional dependency: django-jazzmin (Admin UI theme)
