@@ -4,13 +4,13 @@ services:
     container_name: uzbekburger_web
     env_file:
       - .env
-    ports:
-      - "8000:8000"
     depends_on:
       - db
+    ports:
+      - "127.0.0.1:8000:8000"
     volumes:
-      - media:/app/media
       - staticfiles:/app/staticfiles
+      - /var/www/uzbekburger/media:/app/media
     command: >
       sh -c "
       echo 'Waiting for Postgres...';
@@ -32,10 +32,8 @@ services:
       POSTGRES_PASSWORD: root
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
 
 volumes:
   pgdata:
-  media:
   staticfiles:
+
