@@ -1254,3 +1254,14 @@ input[type="submit"].btn:disabled {
 .pos-food-card .mb-price{
   margin-top:auto;
 }
+/* === FORCE DARK cards on POS (serverda oq bo'lib qolsa ham) === */
+:root:not([data-theme="light"]) .mb-card,
+:root:not([data-theme="light"]) .pos-food-card{
+  background: rgba(2,6,23,.45) !important;
+  border-color: rgba(255,255,255,.10) !important;
+  color: #e5e7eb !important;
+}
+
+:root:not([data-theme="light"]) .mb-name{
+  color: #e5e7eb !important;
+}
