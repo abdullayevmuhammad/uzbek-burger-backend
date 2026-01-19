@@ -38,13 +38,15 @@
                 type="button"
                 data-food-id="{{ f.id }}"
                 data-type="{{ f.type }}">
-          <div class="mb-img">
-            {% if f.image %}
-              <img src="{{ f.image.url }}" alt="{{ f.name }}">
-            {% else %}
-              <div class="mb-img-ph">Rasm yo‘q</div>
-            {% endif %}
-          </div>
+                <div class="mb-img">
+                  {% if f.image %}
+                    <img class="mb-img-bg" src="{{ f.image.url }}" alt="" aria-hidden="true">
+                    <img class="mb-img-main" src="{{ f.image.url }}" alt="{{ f.name }}">
+                  {% else %}
+                    <div class="mb-img-ph">Rasm yo‘q</div>
+                  {% endif %}
+                </div>
+
 
           <div class="mb-name">{{ f.name }}</div>
 
