@@ -1238,13 +1238,13 @@ input[type="submit"].btn:disabled {
   z-index: 2;
   width: 100% !important;
   height: 100% !important;
-  object-fit: contain !important;   /* <-- MUHIM */
+  object-fit: contain !important;
   object-position: center !important;
-
-  /* rasmni kattaroq ko'rsatish uchun ozgina ichkaridan joy */
-  padding: 6px;                     /* xohlasang 0-12 oralig'ida */
-  box-sizing: border-box;
+  padding: 0 !important;
+  transform: scale(1.12);
+  transform-origin: center;
 }
+
 
 /* narx pastda tursin */
 .pos-food-card{
