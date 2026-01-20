@@ -71,7 +71,7 @@ class OrderPaymentInline(admin.TabularInline):
 class OrderAdmin(admin.ModelAdmin):
     inlines = (OrderItemInline, OrderPaymentInline)
 
-    list_display = ("id_short", "branch", "order_type", "status", "total_amount", "paid_amount", "created_at", "total_amount", "cogs_amount", "profit_amount", "status")
+    list_display = ("id_short", "branch", "order_type", "status", "paid_amount", "created_at", "total_amount", "cogs_amount", "profit_amount")
     list_filter = ("branch", "status", "order_type", "is_delivered")
     search_fields = ("id", "note")
     date_hierarchy = "created_at"
