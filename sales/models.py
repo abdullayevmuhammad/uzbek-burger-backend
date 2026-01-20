@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -64,6 +65,14 @@ class Order(models.Model):
     is_locked = models.BooleanField(default=False)
     locked_at = models.DateTimeField(null=True, blank=True)
     locked_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+
+    cogs_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    profit_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+
+    @property
+    def profit(self):
+        # agar profit_amount ishlatmoqchi bo‘lmasangiz property bilan ham yuradi
+        return (self.total_amount or Decimal("0.00")) - (self.cogs_amount or Decimal("0.00"))
 
     def clean(self):
         # Yakunlangan order o'zgartirilmaydi (model-level himoya).

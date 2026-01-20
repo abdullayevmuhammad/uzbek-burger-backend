@@ -74,7 +74,50 @@ class FoodItem(models.Model):
         verbose_name_plural = "Taom mahsulotlari"
 
     def clean(self):
+        # ✅ SET uchun ingredient (product) yozilmaydi.
+        # SET tarkibi SetItem orqali Food'lar bilan tuziladi.
+        if self.food and self.food.type == FoodType.SET:
+            raise ValidationError({
+                "food": "SET uchun FoodItem (ingredient) kiritilmaydi. SET tarkibini SetItem orqali tuzing."
+            })
+
         if self.qty is None or self.qty <= Decimal("0"):
             raise ValidationError({"qty": "Qty 0 dan katta bo‘lishi kerak."})
         if self.product and not self.product.is_active:
             raise ValidationError({"product": "Bu product noaktiv. Aktiv qiling yoki boshqasini tanlang."})
+
+
+class SetItem(models.Model):
+    """SET tarkibi: SET Food ichida boshqa Food'lar (fastfood/drink) bo'ladi."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    set_food = models.ForeignKey(
+        Food,
+        related_name="set_items",
+        on_delete=models.CASCADE,
+        limit_choices_to={"type": FoodType.SET},
+    )
+    food = models.ForeignKey(
+        Food,
+        related_name="as_set_component",
+        on_delete=models.PROTECT,
+        limit_choices_to={"type__in": [FoodType.FASTFOOD, FoodType.DRINK]},
+    )
+    qty = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        unique_together = ("set_food", "food")
+        verbose_name = "Set elementi"
+        verbose_name_plural = "Set elementlari"
+
+    def clean(self):
+        if self.qty is None or int(self.qty) <= 0:
+            raise ValidationError({"qty": "Qty 0 dan katta bo‘lishi kerak."})
+        if self.set_food and self.set_food.type != FoodType.SET:
+            raise ValidationError({"set_food": "set_food type=SET bo‘lishi shart."})
+        if self.food and self.food.type == FoodType.SET:
+            raise ValidationError({"food": "SET ichida yana SET bo‘lishi hozircha taqiqlangan."})
+
+        # ✅ filial aralashib ketmasin
+        if self.set_food and self.food and self.set_food.branch_id != self.food.branch_id:
+            raise ValidationError({"food": "Set ichidagi food set_food bilan bir xil filialniki bo‘lishi kerak."})

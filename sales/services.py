@@ -7,7 +7,7 @@ from django.utils import timezone
 from finance.models import Direction, TxnType
 from finance.services import record_cash_txn
 from inventory.models import BranchProduct
-from menu.models import FoodItem
+from menu.models import FoodItem, FoodType, SetItem
 from sales.models import Order, OrderItem, OrderPayment
 
 
@@ -58,32 +58,67 @@ def add_item(order: Order, *, food, qty: int) -> OrderItem:
     return item
 
 
-def _consume_stock_for_order(order: Order) -> None:
-    """FoodItem (recipe) bo'yicha BranchProduct.stock_qty dan yechadi."""
-    items = order.items.select_related("food").all()
+from decimal import Decimal
 
-    for oi in items:
-        recipe = FoodItem.objects.filter(food=oi.food).select_related("product")
+def _consume_stock_for_order(order: Order) -> None:
+    if order.stock_applied:
+        return
+
+    total_cogs = Decimal("0.00")
+
+    def consume_food(food, qty_multiplier: int) -> Decimal:
+        cogs = Decimal("0.00")
+        recipe = FoodItem.objects.filter(food=food).select_related("product")
+
         for ri in recipe:
-            need_qty = ri.qty * oi.qty  # Decimal * int = Decimal
+            need_qty = ri.qty * int(qty_multiplier)
 
             bp = (
                 BranchProduct.objects.select_for_update()
                 .filter(branch=order.branch, product=ri.product)
                 .first()
             )
-
             if bp is None:
                 raise ValueError(f"Stock topilmadi: {ri.product.name}. Avval import qiling.")
 
             if bp.stock_qty < need_qty:
-                raise ValueError(
-                    f"Stock yetarli emas: {ri.product.name} ({bp.stock_qty} < {need_qty})"
-                )
+                raise ValueError(f"Stock yetarli emas: {ri.product.name} ({bp.stock_qty} < {need_qty})")
+
+            # ✅ COGS snapshot: shu paytdagi avg_unit_cost bilan
+            unit_cost = bp.avg_unit_cost or Decimal("0.00")
+            cogs += (unit_cost * need_qty)
 
             bp.stock_qty = bp.stock_qty - need_qty
             bp.save(update_fields=["stock_qty"])
 
+        return cogs
+
+    items = order.items.select_related("food").all()
+
+    for oi in items:
+        f = oi.food
+
+        if f.type in [FoodType.FASTFOOD, FoodType.DRINK]:
+            total_cogs += consume_food(f, oi.qty)
+            continue
+
+        if f.type == FoodType.SET:
+            set_components = SetItem.objects.filter(set_food=f).select_related("food")
+            if not set_components.exists():
+                raise ValueError(f"Set tarkibi bo'sh: {f.name}. Avval SetItem qo'shing.")
+
+            for si in set_components:
+                total_qty = int(oi.qty) * int(si.qty)
+                total_cogs += consume_food(si.food, total_qty)
+            continue
+
+        raise ValueError(f"Food type not supported for stock consume: {f.type}")
+
+    # ✅ Orderga snapshot yozamiz
+    order.cogs_amount = total_cogs
+    order.profit_amount = (order.total_amount or Decimal("0.00")) - total_cogs
+    order.stock_applied = True
+    order.save(update_fields=["cogs_amount", "profit_amount", "stock_applied"])
 
 @transaction.atomic
 def apply_stock_for_order_if_needed(order: Order) -> None:

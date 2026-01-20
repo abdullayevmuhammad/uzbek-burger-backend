@@ -7,10 +7,10 @@ services:
     depends_on:
       - db
     ports:
-      - "127.0.0.1:8000:8000"
+      - "8000:8000"
     volumes:
       - staticfiles:/app/staticfiles
-      - /var/www/uzbekburger/media:/app/media
+      - ./media:/app/media
     command: >
       sh -c "
       echo 'Waiting for Postgres...';

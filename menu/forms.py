@@ -1,7 +1,9 @@
 from django import forms
 
 from .models import Food
-
+from django.core.exceptions import ValidationError
+from django.forms.models import BaseInlineFormSet
+from .models import FoodType
 
 def _style_form(form: forms.Form):
     for f in form.fields.values():
@@ -51,3 +53,68 @@ class FoodForm(forms.ModelForm):
         # checkbox
         if "is_active" in self.fields:
             self.fields["is_active"].widget.attrs.pop("class", None)
+class FoodItemInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        food = self.instance
+        if not food or not getattr(food, "type", None):
+            return
+
+        if food.type == FoodType.SET:
+            bad = []
+            for form in self.forms:
+                if not hasattr(form, "cleaned_data"):
+                    continue
+                cd = form.cleaned_data
+                if cd.get("DELETE"):
+                    continue
+                if cd.get("product") and cd.get("qty"):
+                    bad.append(str(cd.get("product")))
+
+            if bad:
+                raise ValidationError(
+                    "XATO: Type=SET bo'lsa, Product ingredient kiritilmaydi. "
+                    "Noto'g'ri qo'shilgan product(lar): " + ", ".join(bad) + ". "
+                    "Bularni o'chiring va 'Set elementlari' bo'limidan taom qo'shing."
+                )
+
+
+class SetItemInlineFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        food = self.instance
+        if not food or not getattr(food, "type", None):
+            return
+
+        if food.type in (FoodType.FASTFOOD, FoodType.DRINK):
+            bad = []
+            for form in self.forms:
+                if not hasattr(form, "cleaned_data"):
+                    continue
+                cd = form.cleaned_data
+                if cd.get("DELETE"):
+                    continue
+                if cd.get("food") and cd.get("qty"):
+                    bad.append(str(cd.get("food")))
+
+            if bad:
+                raise ValidationError(
+                    "XATO: Fastfood/Drink uchun SET element qo'shib bo'lmaydi. "
+                    "Noto'g'ri qo'shilgan element(lar): " + ", ".join(bad) + ". "
+                    "Bularni o'chiring yoki Type ni SET qiling."
+                )
+
+        if food.type == FoodType.SET:
+            count = 0
+            for form in self.forms:
+                if not hasattr(form, "cleaned_data"):
+                    continue
+                cd = form.cleaned_data
+                if cd.get("DELETE"):
+                    continue
+                if cd.get("food") and cd.get("qty"):
+                    count += 1
+            if count == 0:
+                raise ValidationError(
+                    "XATO: Type=SET bo'lsa, kamida bitta 'Set elementi' qo'shish shart."
+                )
