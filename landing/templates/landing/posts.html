@@ -1,0 +1,55 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}Yangiliklar - UzbekBurger{% endblock %}
+{% block content %}
+<div class="container" style="padding: 4rem 1rem;">
+  <div class="section-header">
+    <h1 class="section-title">Yangiliklar</h1>
+    <p class="section-subtitle">Aksiyalar va yangiliklarimizdan xabardor bo'ling.</p>
+  </div>
+
+  {% if posts %}
+    <div class="menu-grid" style="margin-top: 2rem;">
+      {% for post in posts %}
+        <div class="menu-card">
+          {% if post.cover %}
+            <img class="menu-img" src="{{ post.cover.url }}" alt="{{ post.title }}" style="height: 180px;">
+          {% else %}
+            <img class="menu-img" src="{% static 'landing/img/placeholder-post.svg' %}" alt="{{ post.title }}" style="height: 180px;">
+          {% endif %}
+          <div class="menu-content">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+              {{ post.published_at|default:post.created_at|date:"d.m.Y" }}
+            </div>
+            <h3 class="menu-title">{{ post.title }}</h3>
+            <p class="menu-desc">{{ post.excerpt|default:post.content|striptags|truncatechars:150 }}</p>
+            <a href="{% url 'landing:post_detail' post.slug %}" style="color: var(--accent-color); font-weight: 500;">Batafsil o'qish →</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if page_obj and page_obj.paginator.num_pages > 1 %}
+      <div style="display:flex; justify-content:center; gap:.5rem; margin-top: 2rem; flex-wrap: wrap;">
+        {% if page_obj.has_previous %}
+          <a class="btn btn-outline" href="?page={{ page_obj.previous_page_number }}">«</a>
+        {% endif %}
+
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}
+            <span class="btn btn-primary" style="pointer-events:none;">{{ n }}</span>
+          {% else %}
+            <a class="btn btn-outline" href="?page={{ n }}">{{ n }}</a>
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+          <a class="btn btn-outline" href="?page={{ page_obj.next_page_number }}">»</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="text-secondary" style="text-align:center;">Yangiliklar hozircha yo'q.</p>
+  {% endif %}
+</div>
+{% endblock %}

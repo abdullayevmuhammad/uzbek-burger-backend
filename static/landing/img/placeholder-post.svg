@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#10b981" opacity="0.10"/>
+  <g fill="#10b981" opacity="0.9">
+    <rect x="220" y="150" width="360" height="40" rx="10"/>
+    <rect x="220" y="210" width="360" height="24" rx="8" opacity="0.85"/>
+    <rect x="220" y="250" width="320" height="24" rx="8" opacity="0.75"/>
+    <rect x="220" y="290" width="280" height="24" rx="8" opacity="0.65"/>
+  </g>
+  <text x="50%" y="78%" dominant-baseline="middle" text-anchor="middle" fill="#0f172a" opacity="0.55" font-family="Arial, sans-serif" font-size="28">
+    Rasm mavjud emas
+  </text>
+</svg>

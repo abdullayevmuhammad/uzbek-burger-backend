@@ -1,0 +1,44 @@
+{% extends 'landing/base.html' %}
+{% block title %}Aloqa - UzbekBurger{% endblock %}
+{% block content %}
+<div class="container" style="padding: 4rem 1rem; max-width: 980px;">
+  <div class="section-header">
+    <h1 class="section-title">Biz bilan bog'lanish</h1>
+    <p class="section-subtitle">Savollaringiz bo'lsa, quyidagi aloqa kanallaridan foydalaning.</p>
+  </div>
+
+  <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 2rem;">
+    {% if settings and settings.phone %}
+      <div class="feature-card" style="text-align:center;">
+        <h3 class="feature-title">Telefon</h3>
+        <p><a href="tel:{{ settings.phone|cut:' ' }}">{{ settings.phone }}</a></p>
+      </div>
+    {% endif %}
+
+    {% if settings and settings.telegram %}
+      <div class="feature-card" style="text-align:center;">
+        <h3 class="feature-title">Telegram</h3>
+        <p><a href="{{ settings.telegram }}" target="_blank" rel="noopener">Ochish</a></p>
+      </div>
+    {% endif %}
+
+    {% if settings and settings.instagram %}
+      <div class="feature-card" style="text-align:center;">
+        <h3 class="feature-title">Instagram</h3>
+        <p><a href="{{ settings.instagram }}" target="_blank" rel="noopener">Ochish</a></p>
+      </div>
+    {% endif %}
+
+    {% if settings and settings.address %}
+      <div class="feature-card" style="text-align:center;">
+        <h3 class="feature-title">Manzil</h3>
+        <p>{{ settings.address }}</p>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if not settings or not settings.phone and not settings.telegram and not settings.instagram and not settings.address %}
+    <p class="text-secondary" style="text-align:center; margin-top: 2rem;">Aloqa ma'lumotlari kiritilmagan.</p>
+  {% endif %}
+</div>
+{% endblock %}

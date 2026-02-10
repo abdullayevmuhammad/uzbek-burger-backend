@@ -1,0 +1,34 @@
+{% extends 'landing/base.html' %}
+{% block title %}Filiallar - UzbekBurger{% endblock %}
+{% block content %}
+<div class="container" style="padding: 4rem 1rem;">
+  <div class="section-header">
+    <h1 class="section-title">Filiallarimiz</h1>
+    <p class="section-subtitle">Eng yaqin filialimizni tanlang.</p>
+  </div>
+
+  {% if branches %}
+    <div class="features-grid" style="grid-template-columns: 1fr; gap: 1.25rem;">
+      {% for b in branches %}
+        <div class="feature-card">
+          <h2 style="margin: 0 0 .75rem; font-size: 1.25rem;">{{ b.name }}</h2>
+
+          {% if b.public_address %}<p style="margin: 0 0 .25rem;">Manzil: {{ b.public_address }}</p>{% endif %}
+          {% if b.public_phone %}<p style="margin: 0 0 .25rem;">Tel: <a href="tel:{{ b.public_phone|cut:' ' }}">{{ b.public_phone }}</a></p>{% endif %}
+          {% if b.working_hours %}<p style="margin: .5rem 0 1rem;"><strong>Ish vaqti:</strong> {{ b.working_hours }}</p>{% endif %}
+
+          {% if b.map_iframe %}
+            <div style="border-radius: 14px; overflow:hidden; border: 1px solid var(--border-color);">
+              {{ b.map_iframe|safe }}
+            </div>
+          {% else %}
+            <p class="text-secondary" style="margin: 0;">Lokatsiya yo'q.</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="text-secondary" style="text-align:center;">Filiallar hozircha qo'shilmagan.</p>
+  {% endif %}
+</div>
+{% endblock %}

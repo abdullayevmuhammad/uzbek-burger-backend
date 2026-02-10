@@ -1,0 +1,24 @@
+<header class="site-header">
+  <div class="container">
+    <nav class="navbar">
+      <a class="logo" href="{% url 'landing:home' %}">UzbekBurger</a>
+
+      <button class="hamburger" aria-label="Menu" type="button">☰</button>
+
+      <div class="nav-links">
+        <a class="nav-link {% if active_page == 'home' %}active{% endif %}" href="{% url 'landing:home' %}">Bosh sahifa</a>
+        <a class="nav-link {% if active_page == 'about' %}active{% endif %}" href="{% url 'landing:about' %}">Biz haqimizda</a>
+        <a class="nav-link {% if active_page == 'menu' %}active{% endif %}" href="{% url 'landing:menu' %}">Menu</a>
+        <a class="nav-link {% if active_page == 'branches' %}active{% endif %}" href="{% url 'landing:branches' %}">Filiallar</a>
+        <a class="nav-link {% if active_page == 'posts' %}active{% endif %}" href="{% url 'landing:posts' %}">Yangiliklar</a>
+        <a class="nav-link {% if active_page == 'contact' %}active{% endif %}" href="{% url 'landing:contact' %}">Aloqa</a>
+      </div>
+
+      <div class="nav-actions">
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Mavzu">
+          <span>◐</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+</header>

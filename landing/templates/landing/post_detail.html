@@ -1,0 +1,27 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% block title %}{{ post.title }} - UzbekBurger{% endblock %}
+{% block content %}
+<div class="container" style="padding: 4rem 1rem; max-width: 920px;">
+  <a href="{% url 'landing:posts' %}" class="text-secondary" style="display:inline-block; margin-bottom: 1rem;">← Yangiliklar</a>
+
+  <h1 class="section-title" style="text-align:left; margin-bottom: .5rem;">{{ post.title }}</h1>
+  <div class="text-secondary" style="margin-bottom: 1.25rem;">
+    {{ post.published_at|default:post.created_at|date:"d.m.Y" }}
+  </div>
+
+  {% if post.cover %}
+    <div style="border-radius: 16px; overflow:hidden; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+      <img src="{{ post.cover.url }}" alt="{{ post.title }}" style="width:100%; height:auto; display:block;">
+    </div>
+  {% endif %}
+
+  <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; line-height: 1.8;">
+    {% if post.content %}
+      {{ post.content|linebreaks }}
+    {% else %}
+      <p class="text-secondary">Kontent mavjud emas.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

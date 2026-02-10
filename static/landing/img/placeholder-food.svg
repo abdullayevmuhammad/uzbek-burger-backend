@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+  <rect width="800" height="500" fill="#10b981" opacity="0.10"/>
+  <g fill="#10b981" opacity="0.9">
+    <path d="M240 240c0-44 36-80 80-80h160c44 0 80 36 80 80v8H240v-8z"/>
+    <path d="M224 280h352v28c0 22-18 40-40 40H264c-22 0-40-18-40-40v-28z"/>
+    <path d="M272 356h256c0 44-36 80-80 80H352c-44 0-80-36-80-80z"/>
+  </g>
+  <text x="50%" y="74%" dominant-baseline="middle" text-anchor="middle" fill="#0f172a" opacity="0.55" font-family="Arial, sans-serif" font-size="28">
+    Rasm mavjud emas
+  </text>
+</svg>

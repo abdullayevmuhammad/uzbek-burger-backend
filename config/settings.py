@@ -47,7 +47,7 @@ USE_HTTPS = os.getenv("DJANGO_USE_HTTPS", "0").lower() in ("1","true","yes","on"
 CSRF_COOKIE_SECURE = USE_HTTPS
 SESSION_COOKIE_SECURE = USE_HTTPS
 # Application definition
-
+ROOT_URLCONF = os.getenv("ROOT_URLCONF", "config.urls")
 # Optional dependency: django-jazzmin (Admin UI theme)
 HAS_JAZZMIN = False
 try:
@@ -71,6 +71,7 @@ INSTALLED_APPS = ([] if not HAS_JAZZMIN else ['jazzmin']) + [
     "finance.apps.FinanceConfig",
     "sales",
     "users",
+    "landing",
 ]
 
 

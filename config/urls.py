@@ -19,6 +19,8 @@ urlpatterns = [
 
     # POS (Sales UI)
     path("pos/", include("sales.urls")),
+    path("landing/", include("landing.urls")),
+
 ]
 
 if settings.DEBUG:

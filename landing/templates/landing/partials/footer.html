@@ -1,0 +1,54 @@
+<footer class="site-footer" id="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div>
+        <div class="footer-logo">UzbekBurger</div>
+        <p class="footer-text">
+          {% if settings and settings.site_description %}
+            {{ settings.site_description }}
+          {% else %}
+            Milliy va zamonaviy fast-food tarmog'i.
+          {% endif %}
+        </p>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Bo'limlar</h4>
+        <ul class="footer-links">
+          <li><a href="{% url 'landing:home' %}">Bosh sahifa</a></li>
+          <li><a href="{% url 'landing:menu' %}">Menu</a></li>
+          <li><a href="{% url 'landing:branches' %}">Filiallar</a></li>
+          <li><a href="{% url 'landing:about' %}">Biz haqimizda</a></li>
+          <li><a href="{% url 'landing:posts' %}">Yangiliklar</a></li>
+          <li><a href="{% url 'landing:contact' %}">Aloqa</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="footer-title">Aloqa</h4>
+        <ul class="footer-links">
+          {% if settings and settings.phone %}
+            <li><a href="tel:{{ settings.phone|cut:' ' }}">{{ settings.phone }}</a></li>
+          {% endif %}
+          {% if settings and settings.telegram %}
+            <li><a href="{{ settings.telegram }}" target="_blank" rel="noopener">Telegram</a></li>
+          {% endif %}
+          {% if settings and settings.instagram %}
+            <li><a href="{{ settings.instagram }}" target="_blank" rel="noopener">Instagram</a></li>
+          {% endif %}
+          {% if settings and settings.address %}
+            <li><span class="footer-muted">{{ settings.address }}</span></li>
+          {% endif %}
+        </ul>
+
+        {% if not settings or not settings.phone and not settings.telegram and not settings.instagram and not settings.address %}
+          <p class="footer-text footer-muted">Aloqa ma'lumotlari kiritilmagan.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>Copyright © 2026 UzbekBurger. All rights reserved.</p>
+    </div>
+  </div>
+</footer>

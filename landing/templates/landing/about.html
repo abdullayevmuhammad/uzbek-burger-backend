@@ -1,0 +1,28 @@
+{% extends 'landing/base.html' %}
+{% block title %}Biz haqimizda - UzbekBurger{% endblock %}
+{% block content %}
+<div class="container" style="padding: 4rem 1rem;">
+  <h1 class="section-title" style="margin-bottom: 2rem;">{% if settings and settings.about_title %}{{ settings.about_title }}{% else %}Biz haqimizda{% endif %}</h1>
+
+  <div style="background-color: var(--card-bg); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-color);">
+    {% if settings and settings.about_text %}
+      <div style="line-height: 1.8;">{{ settings.about_text|linebreaks }}</div>
+    {% else %}
+      <p style="margin-bottom: 1rem;">
+        UzbekBurger — mazali va sifatli fast-food taomlarini taklif qiladigan tarmoq.
+      </p>
+      <p style="margin-bottom: 1rem;">
+        Biz faqat halol va yangi mahsulotlardan foydalanamiz. Har bir taomimiz mehr bilan tayyorlanadi.
+      </p>
+      <p>
+        Maqsadimiz — har bir mijozga unutilmas ta’m ulashish.
+      </p>
+    {% endif %}
+  </div>
+
+  <div style="margin-top: 3rem; text-align:center;">
+    <a class="btn btn-primary" href="{% url 'landing:menu' %}">Menuni ko'rish</a>
+    <a class="btn btn-outline" href="{% url 'landing:branches' %}" style="margin-left: .75rem;">Filiallar</a>
+  </div>
+</div>
+{% endblock %}

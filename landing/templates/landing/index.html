@@ -1,0 +1,151 @@
+{% extends 'landing/base.html' %}
+{% load static %}
+{% load landing_utils %}
+{% block title %}UzbekBurger - Mazali taomlar{% endblock %}
+{% block content %}
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <h1 class="hero-title">
+      {% if settings and settings.hero_title %}{{ settings.hero_title }}{% else %}Mazali burgerlar va zamonaviy xizmat{% endif %}
+    </h1>
+    <p class="hero-subtitle">
+      {% if settings and settings.hero_subtitle %}{{ settings.hero_subtitle }}{% else %}Bizning menudan o'zingizga yoqqan taomni tanlang va eng yaqin filialga tashrif buyuring.{% endif %}
+    </p>
+    <div class="hero-buttons">
+      <a class="btn btn-primary" href="{% url 'landing:menu' %}">Menuni ko'rish</a>
+      <a class="btn btn-outline" href="{% url 'landing:branches' %}">Filiallar</a>
+    </div>
+  </div>
+</section>
+
+<!-- Nega biz -->
+<section class="features">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Nega aynan biz?</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <h3 class="feature-title">Sifatli mahsulot</h3>
+        <p>Taomlarimiz yangi va halol mahsulotlardan tayyorlanadi.</p>
+      </div>
+      <div class="feature-card">
+        <h3 class="feature-title">Tezkor xizmat</h3>
+        <p>Buyurtmalar tez tayyorlanadi, xizmat ko'rsatish yuqori.</p>
+      </div>
+      <div class="feature-card">
+        <h3 class="feature-title">Qulay joylashuv</h3>
+        <p>Shaharning turli nuqtalarida filiallarimiz mavjud.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Menu preview -->
+<section class="menu-preview">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Menudan tavsiya</h2>
+      <p class="section-subtitle">Eng ko'p tanlanadigan taomlarimiz.</p>
+    </div>
+
+    {% if foods %}
+      <div class="menu-grid">
+        {% for food in foods %}
+          <div class="menu-card">
+            {% if food.image %}
+              <img class="menu-img" src="{{ food.image.url }}" alt="{{ food.name }}">
+            {% else %}
+              <img class="menu-img" src="{% static 'landing/img/placeholder-food.svg' %}" alt="{{ food.name }}">
+            {% endif %}
+            <div class="menu-content">
+              <h3 class="menu-title">{{ food.name }}</h3>
+              <p class="menu-desc">
+                {% if food.category %}{{ food.category.name }}{% else %}{{ food.get_type_display }}{% endif %}
+              </p>
+              <div class="menu-price">{{ food.sell_price|som }}</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <div style="text-align:center; margin-top: 1.5rem;">
+        <a class="btn btn-outline" href="{% url 'landing:menu' %}">Barcha menuni ko'rish</a>
+      </div>
+    {% else %}
+      <p class="text-secondary" style="text-align:center;">Hozircha menyu ma'lumotlari kiritilmagan.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Filiallar preview -->
+<section class="features">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Filiallar</h2>
+      <p class="section-subtitle">Eng yaqin filialni tanlang.</p>
+    </div>
+
+    {% if branches %}
+      <div class="features-grid">
+        {% for b in branches %}
+          <div class="feature-card">
+            <h3 class="feature-title">{{ b.name }}</h3>
+            {% if b.public_address %}<p>Manzil: {{ b.public_address }}</p>{% endif %}
+            {% if b.public_phone %}<p>Tel: {{ b.public_phone }}</p>{% endif %}
+            {% if b.working_hours %}
+              <p class="text-secondary" style="margin-top: 0.5rem; font-size: 0.9rem;">
+                <strong>Ish vaqti:</strong> {{ b.working_hours }}
+              </p>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+      <div style="text-align:center; margin-top: 1.5rem;">
+        <a class="btn btn-outline" href="{% url 'landing:branches' %}">Barcha filiallar</a>
+      </div>
+    {% else %}
+      <p class="text-secondary" style="text-align:center;">Filiallar hozircha qo'shilmagan.</p>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Yangiliklar preview -->
+<section class="menu-preview">
+  <div class="container">
+    <div class="section-header">
+      <h2 class="section-title">Yangiliklar</h2>
+      <p class="section-subtitle">So'nggi yangiliklar va aksiyalar.</p>
+    </div>
+
+    {% if posts %}
+      <div class="menu-grid">
+        {% for post in posts %}
+          <div class="menu-card">
+            {% if post.cover %}
+              <img class="menu-img" src="{{ post.cover.url }}" alt="{{ post.title }}" style="height: 150px;">
+            {% else %}
+              <img class="menu-img" src="{% static 'landing/img/placeholder-post.svg' %}" alt="{{ post.title }}" style="height: 150px;">
+            {% endif %}
+            <div class="menu-content">
+              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
+                {{ post.published_at|default:post.created_at|date:"d.m.Y" }}
+              </div>
+              <h3 class="menu-title">{{ post.title }}</h3>
+              <p class="menu-desc">{{ post.excerpt|default:post.content|striptags|truncatechars:120 }}</p>
+              <a href="{% url 'landing:post_detail' post.slug %}" style="color: var(--accent-color); font-weight: 500;">Batafsil →</a>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <div style="text-align:center; margin-top: 1.5rem;">
+        <a class="btn btn-outline" href="{% url 'landing:posts' %}">Barcha yangiliklar</a>
+      </div>
+    {% else %}
+      <p class="text-secondary" style="text-align:center;">Yangiliklar hozircha yo'q.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}
