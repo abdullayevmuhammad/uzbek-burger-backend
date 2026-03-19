@@ -92,7 +92,7 @@
       <div class="pos-section">
         <div class="pos-toggles">
           <label class="pos-toggle">
-            <input type="checkbox" id="is_paid" name="is_paid" value="1">
+            <input type="checkbox" id="is_paid" name="is_paid" value="1" {% if not has_payment_accounts %}disabled{% endif %}>
             <span>To‘langan</span>
           </label>
 
@@ -105,23 +105,35 @@
 
       <div class="pos-section" id="payBox" style="display:none;">
         <div class="pos-section-title">To‘lov</div>
-        <div class="pos-field">
-          <label>Kassa</label>
-          <select class="control" name="account_id">
-            <option value="">Tanlang...</option>
-            {% for a in accounts %}
-              <option value="{{ a.id }}">{{ a.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        {% if single_account %}
+          <input type="hidden" name="account_id" value="{{ single_account.id }}">
+          <div class="pos-field">
+            <label>To'lov hisobi</label>
+            <div class="control control-static">{{ single_account.name }}</div>
+          </div>
+        {% elif has_payment_accounts %}
+          <div class="pos-field">
+            <label>Kassa</label>
+            <select class="control" name="account_id">
+              <option value="">Tanlang...</option>
+              {% for a in accounts %}
+                <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% else %}
+          <div class="notice notice-warning">
+            Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.
+          </div>
+        {% endif %}
 
         <div class="pos-field">
           <label>Summa</label>
-          <input class="control" type="number" min="0" name="paid_amount" id="paid_amount" placeholder="Jami summa">
+          <input class="control" type="number" min="0" name="paid_amount" id="paid_amount" placeholder="Jami summa" {% if not has_payment_accounts %}disabled{% endif %}>
           <div class="pos-quick">
             <button type="button" class="chip" data-quick-amount="full">To‘liq</button>
-            <button type="button" class="chip" data-quick-amount="50000">50 000</button>
-            <button type="button" class="chip" data-quick-amount="100000">100 000</button>
+            <button type="button" class="chip" data-quick-amount="50000" {% if not has_payment_accounts %}disabled{% endif %}>50 000</button>
+            <button type="button" class="chip" data-quick-amount="100000" {% if not has_payment_accounts %}disabled{% endif %}>100 000</button>
           </div>
         </div>
       </div>
@@ -349,10 +361,17 @@
   const isPaid = document.getElementById("is_paid");
   const payBox = document.getElementById("payBox");
   const paidAmountInput = document.getElementById("paid_amount");
+  const hasPaymentAccounts = {{ has_payment_accounts|yesno:"true,false" }};
 
   isPaid.addEventListener("change", () => {
     payBox.style.display = isPaid.checked ? "" : "none";
     if(isPaid.checked){
+      if(!hasPaymentAccounts){
+        alert("Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.");
+        isPaid.checked = false;
+        payBox.style.display = "none";
+        return;
+      }
       renderReceipt(); // auto fill
     }else{
       if(paidAmountInput){
@@ -395,12 +414,22 @@
   // ---- Initial
   applyFilters();
   renderReceipt();
+  if(!hasPaymentAccounts){
+    document.querySelectorAll("[data-quick-amount]").forEach(btn => {
+      btn.disabled = true;
+    });
+  }
 
   // ---- Prevent submit with empty cart
   document.getElementById("posForm").addEventListener("submit", (e) => {
     if(cart.size === 0){
       e.preventDefault();
       alert("Kamida bitta taom tanlang.");
+      return;
+    }
+    if(isPaid.checked && !hasPaymentAccounts){
+      e.preventDefault();
+      alert("Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.");
     }
   });
 </script>

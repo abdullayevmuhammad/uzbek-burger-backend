@@ -316,6 +316,137 @@ class SalesFlowTests(TestCase):
         self.assertContains(response, "Buyurtmada xato itemlar bor")
         self.assertEqual(Order.objects.count(), 0)
 
+    def test_create_order_view_hides_dropdown_for_single_account(self):
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_order_create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "To'lov hisobi")
+        self.assertContains(response, f'value="{self.account_a.id}"', html=False)
+        self.assertNotContains(response, '<select class="control" name="account_id"', html=False)
+        self.assertNotContains(response, "Tanlang...")
+
+    def test_create_order_view_uses_single_account_without_dropdown_selection(self):
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.post(
+            reverse("sales:pos_order_create"),
+            {
+                "items_json": '[{"food": "%s", "qty": 1}]' % self.food_a.id,
+                "order_type": Order.OrderType.DINE_IN,
+                "is_paid": "1",
+                "paid_amount": "10000",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        order = Order.objects.get(branch=self.branch_a)
+        self.assertEqual(order.paid_amount, 10000)
+        self.assertEqual(order.status, Order.Status.PAID)
+
+    def test_create_order_view_shows_dropdown_when_multiple_accounts_exist(self):
+        MoneyAccount.objects.create(branch=self.branch_a, name="Card A")
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_order_create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'select class="control" name="account_id"', html=False)
+        self.assertContains(response, "Tanlang...")
+
+    def test_create_order_view_warns_and_blocks_payment_when_no_accounts_exist(self):
+        self.account_a.delete()
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_order_create"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Faol to'lov hisobi topilmadi")
+        self.assertContains(response, 'id="is_paid" name="is_paid" value="1" disabled', html=False)
+
+        post_response = self.client.post(
+            reverse("sales:pos_order_create"),
+            {
+                "items_json": '[{"food": "%s", "qty": 1}]' % self.food_a.id,
+                "order_type": Order.OrderType.DINE_IN,
+                "is_paid": "1",
+                "paid_amount": "10000",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(post_response.status_code, 200)
+        self.assertContains(post_response, "Faol to'lov hisobi topilmadi")
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_pay_order_view_hides_dropdown_for_single_account(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_order_detail", args=[order.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "To'lov hisobi")
+        self.assertContains(response, f'value="{self.account_a.id}"', html=False)
+        self.assertNotContains(response, "Tanlang...")
+
+    def test_pay_order_view_uses_single_account_without_dropdown_selection(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.post(
+            reverse("sales:pos_order_pay", args=[order.pk]),
+            {"amount": "10000"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.paid_amount, 10000)
+        self.assertEqual(order.status, Order.Status.PAID)
+
+    def test_pay_order_view_shows_warning_and_rejects_when_no_accounts_exist(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        self.account_a.delete()
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_order_detail", args=[order.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Faol to'lov hisobi topilmadi")
+        self.assertContains(response, 'type="submit" disabled', html=False)
+
+        post_response = self.client.post(
+            reverse("sales:pos_order_pay", args=[order.pk]),
+            {"amount": "10000"},
+            follow=True,
+        )
+
+        self.assertEqual(post_response.status_code, 200)
+        self.assertContains(post_response, "Faol to'lov hisobi topilmadi")
+        order.refresh_from_db()
+        self.assertEqual(order.paid_amount, 0)
+
 
 class AdminReadOnlyTests(TestCase):
     def test_cash_transaction_admin_is_read_only(self):

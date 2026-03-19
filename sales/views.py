@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from core.middleware import get_active_branch
-from finance.models import AccountKind, MoneyAccount
+from finance.models import MoneyAccount
 from menu.models import Food, FoodType
 from users.models import StaffRole
 
@@ -47,11 +47,12 @@ def _require_branch(request):
     raise PermissionError("Faol filial tanlanmagan")
 
 
-def _branch_accounts(branch):
+def _branch_accounts(branch, *, ensure_default: bool = False):
     """Filial kassalari (MoneyAccount)."""
     qs = MoneyAccount.objects.filter(branch=branch, is_active=True).order_by("name")
-    # Hech bo'lmasa bitta kassa bo'lsin (signal ishlamagan bo'lsa ham)
-    if not qs.exists():
+    if ensure_default and not qs.exists():
+        from finance.models import AccountKind
+
         MoneyAccount.objects.get_or_create(
             branch=branch,
             name="Kassa",
@@ -139,6 +140,7 @@ def pos_order_create(request):
         )
 
     accounts = list(_branch_accounts(branch))
+    single_account = accounts[0] if len(accounts) == 1 else None
 
     if request.method == "POST":
         raw_items = request.POST.get("items_json") or "[]"
@@ -179,13 +181,12 @@ def pos_order_create(request):
                 # to'lov
                 if is_paid:
                     if not account_id:
-                        # default: birinchi account
-                        acc = accounts[0] if accounts else None
+                        acc = single_account
                     else:
                         acc = get_object_or_404(MoneyAccount, id=account_id, branch=branch, is_active=True)
 
                     if acc is None:
-                        raise ValueError("Kassa topilmadi. Admin: filialga kassa yarating.")
+                        raise ValueError("Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.")
 
                     if paid_amount_raw:
                         amount = parse_uzs_amount(paid_amount_raw)
@@ -213,6 +214,8 @@ def pos_order_create(request):
             "foods_json": json.dumps(foods_json, ensure_ascii=False),
             "FoodType": FoodType,
             "accounts": accounts,
+            "single_account": single_account,
+            "has_payment_accounts": bool(accounts),
             "OrderType": Order.OrderType,
         },
     )
@@ -236,6 +239,7 @@ def pos_order_detail(request, pk):
     payments = list(order.payments.select_related("account").all().order_by("-created_at"))
 
     accounts = list(_branch_accounts(branch))
+    single_account = accounts[0] if len(accounts) == 1 else None
 
     due = max(0, int(order.total_amount) - int(order.paid_amount))
 
@@ -248,6 +252,8 @@ def pos_order_detail(request, pk):
             "items": items,
             "payments": payments,
             "accounts": accounts,
+            "single_account": single_account,
+            "has_payment_accounts": bool(accounts),
             "due": due,
             "Status": Order.Status,
             "OrderType": Order.OrderType,
@@ -275,17 +281,26 @@ def pos_order_pay(request, pk):
     amount_raw = (request.POST.get("amount") or "").strip()
     note = (request.POST.get("note") or "").strip() or None
 
+    accounts = list(_branch_accounts(branch))
+    single_account = accounts[0] if len(accounts) == 1 else None
+
     if not account_id:
-        messages.error(request, "Kassa tanlang.")
-        return redirect("sales:pos_order_detail", pk=pk)
+        if single_account is not None:
+            acc = single_account
+        else:
+            message = "Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating."
+            if accounts:
+                message = "Kassa tanlang."
+            messages.error(request, message)
+            return redirect("sales:pos_order_detail", pk=pk)
+    else:
+        acc = get_object_or_404(MoneyAccount, id=account_id, branch=branch, is_active=True)
 
     try:
         amount = parse_uzs_amount(amount_raw)
     except Exception:
         messages.error(request, "To'lov summasi noto'g'ri.")
         return redirect("sales:pos_order_detail", pk=pk)
-
-    acc = get_object_or_404(MoneyAccount, id=account_id, branch=branch, is_active=True)
 
     try:
         pay_order(order, account=acc, amount=amount, note=note, by_user=request.user)

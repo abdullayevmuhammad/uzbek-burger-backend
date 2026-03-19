@@ -104,27 +104,39 @@
     {% if not order.is_locked and due > 0 %}
       <form method="post" action="{% url 'sales:pos_order_pay' order.pk %}" class="pos-pay-form">
         {% csrf_token %}
-        <div class="pos-field">
-          <label>Kassa</label>
-          <select class="control" name="account_id" required>
-            <option value="">Tanlang...</option>
-            {% for a in accounts %}
-              <option value="{{ a.id }}">{{ a.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
+        {% if single_account %}
+          <input type="hidden" name="account_id" value="{{ single_account.id }}">
+          <div class="pos-field">
+            <label>To'lov hisobi</label>
+            <div class="control control-static">{{ single_account.name }}</div>
+          </div>
+        {% elif has_payment_accounts %}
+          <div class="pos-field">
+            <label>Kassa</label>
+            <select class="control" name="account_id" required>
+              <option value="">Tanlang...</option>
+              {% for a in accounts %}
+                <option value="{{ a.id }}">{{ a.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% else %}
+          <div class="notice notice-warning">
+            Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.
+          </div>
+        {% endif %}
 
         <div class="pos-field">
           <label>Summa</label>
-          <input class="control" type="number" min="1" name="amount" value="{{ due }}" required>
+          <input class="control" type="number" min="1" name="amount" value="{{ due }}" required {% if not has_payment_accounts %}disabled{% endif %}>
         </div>
 
         <div class="pos-field">
           <label>Izoh</label>
-          <input class="control" type="text" name="note" placeholder="Masalan: naqd / karta">
+          <input class="control" type="text" name="note" placeholder="Masalan: naqd / karta" {% if not has_payment_accounts %}disabled{% endif %}>
         </div>
 
-        <button class="btn btn-primary" type="submit">To'lov qabul qilish</button>
+        <button class="btn btn-primary" type="submit" {% if not has_payment_accounts %}disabled{% endif %}>To'lov qabul qilish</button>
       </form>
     {% elif due <= 0 %}
       <div class="badge badge-ok">Buyurtma to'liq to'langan.</div>

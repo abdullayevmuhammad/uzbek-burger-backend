@@ -359,6 +359,12 @@ strong,b{ font-weight:650; }
 .control::placeholder{ color: var(--placeholder); }
 select.control{ cursor:pointer; }
 textarea.control{ min-height: 90px; resize: vertical; }
+.control-static{
+  display:flex;
+  align-items:center;
+  min-height:48px;
+  cursor:default;
+}
 .control-sm{ padding:10px 10px; border-radius:10px; font-size:13px; }
 
 /* Pretty form helpers used in templates */
