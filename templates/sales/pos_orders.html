@@ -45,11 +45,9 @@
   <table class="table">
     <thead>
       <tr>
-        <th>ID</th>
-        <th>Vaqt</th>
+        <th>ID / Vaqt</th>
         <th>Turi</th>
-        <th>Topshirilgan</th>
-        <th>To‘lov</th>
+        <th>Holat</th>
         <th>Jami</th>
         <th></th>
       </tr>
@@ -57,25 +55,24 @@
     <tbody>
       {% for o in orders %}
         <tr>
-          <td><span class="mono">{{ o.id|stringformat:"s"|slice:":8" }}</span></td>
-          <td>{{ o.created_at|date:"d.m.Y H:i" }}</td>
+          <td>
+            <div class="mono">{{ o.id|stringformat:"s"|slice:":8" }}</div>
+            <div class="muted">{{ o.created_at|date:"d.m.Y H:i" }}</div>
+          </td>
           <td>{{ o.get_order_type_display }}</td>
           <td>
             {% if o.is_delivered %}
-              <span class="badge badge-ok">Ha</span>
+              <span class="chip chip-ok">Topshirildi</span>
             {% else %}
-              <span class="badge badge-warn">Yo‘q</span>
+              <span class="chip chip-warn">Jo'natilmagan</span>
             {% endif %}
-          </td>
-          <td>
             {% if o.is_fully_paid %}
-              <span class="badge badge-ok">To‘langan</span>
+              <span class="chip chip-ok">To‘liq to‘langan</span>
             {% elif o.paid_amount > 0 %}
-              <span class="badge badge-warn">Qisman</span>
+              <span class="chip chip-warn">Qisman</span>
             {% else %}
-              <span class="badge badge-danger">To‘lanmagan</span>
+              <span class="chip chip-danger">To‘lanmagan</span>
             {% endif %}
-
           </td>
           <td><b>{{ o.total_amount|som }}</b></td>
           <td style="text-align:right;">

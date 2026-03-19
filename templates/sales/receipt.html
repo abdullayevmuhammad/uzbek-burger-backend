@@ -1,0 +1,190 @@
+{% load humanize %}
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <title>Chek {{ order.id|stringformat:"s"|slice:":8" }}</title>
+  <style>
+    :root {
+      --paper-58: 58mm;
+      --paper-80: 80mm;
+      --paper-width: {% if paper_width == "58" %}var(--paper-58){% else %}var(--paper-80){% endif %};
+      --font-main: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    @page {
+      margin: 4mm;
+      size: auto;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0 auto;
+      width: var(--paper-width);
+      padding: 6px;
+      background: #fff;
+      color: #111;
+      font: 12px/1.35 var(--font-main);
+    }
+
+    .screen-tools {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .screen-tools a,
+    .screen-tools button {
+      border: 1px solid #222;
+      background: #111;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: 700 12px/1 var(--font-main);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .receipt {
+      width: 100%;
+    }
+
+    .center { text-align: center; }
+    .muted { color: #555; font-size: 11px; }
+    .bold { font-weight: 700; }
+    .divider {
+      border-bottom: 1px dashed #888;
+      margin: 8px 0;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .row > :first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .row > :last-child {
+      flex-shrink: 0;
+      text-align: right;
+    }
+
+    .item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      margin: 5px 0;
+      align-items: start;
+    }
+
+    .item-meta {
+      margin-top: 2px;
+      color: #555;
+      font-size: 11px;
+    }
+
+    .footer {
+      margin-top: 10px;
+      text-align: center;
+      color: #555;
+      font-size: 10px;
+    }
+
+    .badge {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 2px 6px;
+      border: 1px solid #999;
+      border-radius: 999px;
+      font-size: 10px;
+    }
+
+    @media print {
+      .screen-tools { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="screen-tools">
+    <button type="button" onclick="window.print()">Chop etish</button>
+    {% if paper_width == "58" %}
+      <a href="?paper=80">80mm</a>
+    {% else %}
+      <a href="?paper=58">58mm</a>
+    {% endif %}
+  </div>
+
+  <div class="receipt">
+    <div class="center">
+      <div class="bold" style="font-size:16px;">UzbekBurger</div>
+      <div class="muted">{{ branch.name }}</div>
+      {% if branch.public_address %}<div class="muted">{{ branch.public_address }}</div>{% endif %}
+      {% if branch.public_phone %}<div class="muted">{{ branch.public_phone }}</div>{% endif %}
+    </div>
+
+    <div class="divider"></div>
+    <div class="row"><span>Chek ID</span><span class="bold">{{ order.id|stringformat:"s"|slice:":8" }}</span></div>
+    <div class="row"><span>Sana</span><span>{{ order.created_at|date:"d.m.Y H:i" }}</span></div>
+    <div class="row"><span>Kassir</span><span>{% if order.created_by %}{{ order.created_by.username }}{% else %}-{% endif %}</span></div>
+    <div class="row"><span>Turi</span><span>{{ order.get_order_type_display }}</span></div>
+    <div class="row"><span>Format</span><span>{{ paper_width }}mm</span></div>
+
+    {% if order.is_delivered or order.is_fully_paid %}
+      <div class="center">
+        {% if order.is_delivered %}<span class="badge">Topshirildi</span>{% endif %}
+        {% if order.is_fully_paid %}<span class="badge">To'langan</span>{% endif %}
+      </div>
+    {% endif %}
+
+    <div class="divider"></div>
+
+    {% for it in items %}
+      <div class="item">
+        <div>
+          <div class="bold">{{ it.name }}</div>
+          <div class="item-meta">{{ it.qty }} x {{ it.unit_price|intcomma }} so'm</div>
+        </div>
+        <div class="bold">{{ it.line_total|intcomma }} so'm</div>
+      </div>
+    {% endfor %}
+
+    <div class="divider"></div>
+    <div class="row"><span>Jami</span><span class="bold">{{ total_amount|intcomma }} so'm</span></div>
+    <div class="row"><span>To'langan</span><span>{{ paid_amount|intcomma }} so'm</span></div>
+    <div class="row"><span>Qoldiq</span><span class="bold">{{ due|intcomma }} so'm</span></div>
+
+    {% if payments %}
+      <div class="divider"></div>
+      <div class="bold" style="margin-bottom:4px;">To'lovlar</div>
+      {% for p in payments %}
+        <div class="row muted">
+          <span>{{ p.created_at|date:"d.m H:i" }} • {{ p.account }}</span>
+          <span>{{ p.amount|intcomma }} so'm</span>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="divider"></div>
+    <div class="footer">
+      Rahmat. Fiskal yoki QR integratsiya uchun joy keyin qo'shiladi.
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        if (typeof window.print === "function") {
+          window.print();
+        }
+      }, 150);
+    });
+  </script>
+</body>
+</html>

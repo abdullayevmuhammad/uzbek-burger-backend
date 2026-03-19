@@ -8,8 +8,8 @@
 <div class="pos-page-head">
   <div>
     <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
-    <h1 class="pos-h1">Yangi buyurtma</h1>
-    <div class="muted" style="margin-top:6px;">Menyudan taomlarni tanlang. O'ng tomonda chek real-time yangilanadi.</div>
+    <h1 class="pos-h1">Tez buyurtma</h1>
+    <div class="muted" style="margin-top:6px;">Kategoriya pillari, tez qidiruv va stikiy chek bilan kassa jarayonini tezlashtirdik.</div>
   </div>
 
   <div class="pos-head-actions">
@@ -17,19 +17,22 @@
   </div>
 </div>
 
-<div class="pos-create-wrap">
-  <div class="pos-menu-col">
-    <div class="pos-menu-top">
-      <div class="pos-tabs" id="posTabs">
-        <button type="button" class="pos-tab active" data-type="ALL">Barchasi</button>
-        <button type="button" class="pos-tab" data-type="{{ FoodType.FASTFOOD }}">Fastfood</button>
-        <button type="button" class="pos-tab" data-type="{{ FoodType.DRINK }}">Ichimliklar</button>
-        <button type="button" class="pos-tab" data-type="{{ FoodType.SET }}">Setlar</button>
+<div class="pos-workspace">
+  <section class="pos-menu-col">
+    <div class="pos-toolbar">
+      <div class="pill">
+        {{ branch.name }} • <span id="itemCounter">0 ta</span>
       </div>
-
       <div class="pos-search">
-        <input class="control" id="posSearch" placeholder="Izlash... (nom bo‘yicha)">
+        <input class="control" id="posSearch" placeholder="Qidirish (nom, tur)...">
       </div>
+    </div>
+
+    <div class="pos-tabs scrollable" id="posTabs">
+      <button type="button" class="pos-tab active" data-type="ALL">Barchasi</button>
+      <button type="button" class="pos-tab" data-type="{{ FoodType.FASTFOOD }}">Fastfood</button>
+      <button type="button" class="pos-tab" data-type="{{ FoodType.DRINK }}">Ichimliklar</button>
+      <button type="button" class="pos-tab" data-type="{{ FoodType.SET }}">Setlar</button>
     </div>
 
     <div class="mb-grid pos-menu-grid" id="posMenuGrid">
@@ -38,25 +41,25 @@
                 type="button"
                 data-food-id="{{ f.id }}"
                 data-type="{{ f.type }}">
-                <div class="mb-img">
-                  {% if f.image %}
-                    <img class="mb-img-bg" src="{{ f.image.url }}" alt="" aria-hidden="true">
-                    <img class="mb-img-main" src="{{ f.image.url }}" alt="{{ f.name }}">
-                  {% else %}
-                    <div class="mb-img-ph">Rasm yo‘q</div>
-                  {% endif %}
-                </div>
-
+          <div class="mb-img">
+            {% if f.image %}
+              <img class="mb-img-bg" src="{{ f.image.url }}" alt="" aria-hidden="true">
+              <img class="mb-img-main" src="{{ f.image.url }}" alt="{{ f.name }}">
+            {% else %}
+              <div class="mb-img-ph">Rasm yo‘q</div>
+            {% endif %}
+          </div>
 
           <div class="mb-name">{{ f.name }}</div>
 
           <div class="mb-price">
+            <span class="chip">{{ f.get_type_display }}</span>
             <span class="mb-price-chip">{{ f.sell_price|som }}</span>
           </div>
         </button>
       {% endfor %}
     </div>
-  </div>
+  </section>
 
   <aside class="pos-receipt-col">
     <form method="post" id="posForm" class="pos-receipt">
@@ -64,8 +67,14 @@
       <input type="hidden" name="items_json" id="items_json" value="[]">
 
       <div class="pos-receipt-head">
-        <div class="pos-card-title">Chek</div>
-        <button type="button" class="btn btn-sm btn-ghost" id="clearCart">Tozalash</button>
+        <div>
+          <div class="pos-card-title">Chek</div>
+          <div class="muted small">Stikiy panel, katta tugmalar va klaviatura qisqartmalari.</div>
+        </div>
+        <div class="pos-receipt-totals">
+          <div class="muted">Jami</div>
+          <div class="pos-total-amt" id="grandTotal">0 so‘m</div>
+        </div>
       </div>
 
       <div class="pos-section">
@@ -109,25 +118,50 @@
         <div class="pos-field">
           <label>Summa</label>
           <input class="control" type="number" min="0" name="paid_amount" id="paid_amount" placeholder="Jami summa">
+          <div class="pos-quick">
+            <button type="button" class="chip" data-quick-amount="full">To‘liq</button>
+            <button type="button" class="chip" data-quick-amount="50000">50 000</button>
+            <button type="button" class="chip" data-quick-amount="100000">100 000</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pos-section">
+        <div class="pos-field">
+          <label>Izoh</label>
+          <textarea class="control" name="note" rows="2" placeholder="Masalan: qo'shimcha sous, tez tayyorlash"></textarea>
         </div>
       </div>
 
       <div class="pos-lines" id="receiptLines">
-        <div class="muted" id="emptyCartHint" style="padding:12px;">Hozircha taom tanlanmagan.</div>
+        <div class="empty-cart" id="emptyCartHint">
+          <div class="icon">🧾</div>
+          <div>Hozircha taom tanlanmagan. Chapdagi kartalardan tez qo‘shing.</div>
+        </div>
       </div>
 
       <div class="pos-totals">
         <div class="pos-total-row">
           <span class="muted">Jami</span>
-          <span class="pos-total-amt" id="grandTotal">0 so‘m</span>
+          <span class="pos-total-amt" id="grandTotalInline">0 so‘m</span>
         </div>
       </div>
 
       <div class="pos-actions">
-        <button class="btn btn-primary" id="submitOrder" type="submit" disabled>Buyurtmani saqlash</button>
+        <button class="btn btn-ghost" type="button" id="clearCart">Tozalash</button>
+        <button class="btn btn-primary" id="submitOrder" type="submit" disabled>Saqlash</button>
       </div>
     </form>
   </aside>
+</div>
+
+<div class="pos-summary-bar" id="summaryBar">
+  <div>
+    <div class="muted">Jami</div>
+    <div class="pos-total-amt" id="grandTotalBar">0 so‘m</div>
+  </div>
+  <div class="muted" id="itemCount">0 ta</div>
+  <button class="btn btn-primary" type="button" id="submitOrderBottom" disabled>Saqlash</button>
 </div>
 {% endblock %}
 
@@ -136,6 +170,7 @@
   // ---- Data
   const FOODS = {{ foods_json|safe }};
   const foodsById = new Map(FOODS.map(f => [f.id, f]));
+  let lastTotal = 0;
 
   function moneyUZS(n){
     try{
@@ -189,9 +224,14 @@
     const lines = document.getElementById("receiptLines");
     const emptyHint = document.getElementById("emptyCartHint");
     const submitBtn = document.getElementById("submitOrder");
+    const submitBtnBottom = document.getElementById("submitOrderBottom");
     const grandEl = document.getElementById("grandTotal");
+    const grandInline = document.getElementById("grandTotalInline");
+    const grandBar = document.getElementById("grandTotalBar");
     const itemsInput = document.getElementById("items_json");
     const paidAmountInput = document.getElementById("paid_amount");
+    const itemCounter = document.getElementById("itemCounter");
+    const itemCountBar = document.getElementById("itemCount");
 
     lines.querySelectorAll(".pos-line").forEach(n => n.remove());
 
@@ -200,7 +240,13 @@
     if(arr.length === 0){
       emptyHint.style.display = "block";
       submitBtn.disabled = true;
+      submitBtnBottom && (submitBtnBottom.disabled = true);
       grandEl.textContent = moneyUZS(0);
+      lastTotal = 0;
+      grandInline && (grandInline.textContent = moneyUZS(0));
+      grandBar && (grandBar.textContent = moneyUZS(0));
+      itemCounter && (itemCounter.textContent = "0 ta");
+      itemCountBar && (itemCountBar.textContent = "0 ta");
       itemsInput.value = "[]";
       if(paidAmountInput && document.getElementById("is_paid").checked){
         paidAmountInput.value = "";
@@ -210,14 +256,17 @@
 
     emptyHint.style.display = "none";
     submitBtn.disabled = false;
+    submitBtnBottom && (submitBtnBottom.disabled = false);
 
     let total = 0;
     const payload = [];
+    let totalQty = 0;
 
     for(const it of arr){
       const unit = getLinePrice(it);
       const line = unit * it.qty;
       total += line;
+      totalQty += it.qty;
 
       payload.push({food: it.foodId, qty: it.qty});
 
@@ -250,6 +299,11 @@
     }
 
     grandEl.textContent = moneyUZS(total);
+    lastTotal = total;
+    grandInline && (grandInline.textContent = moneyUZS(total));
+    grandBar && (grandBar.textContent = moneyUZS(total));
+    itemCounter && (itemCounter.textContent = `${totalQty} ta`);
+    itemCountBar && (itemCountBar.textContent = `${totalQty} ta`);
     itemsInput.value = JSON.stringify(payload);
 
     // Paid amount auto-fill
@@ -314,8 +368,29 @@
     });
   }
 
+  document.querySelectorAll("[data-quick-amount]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if(!paidAmountInput) return;
+      const v = btn.dataset.quickAmount;
+      if(v === "full"){
+        paidAmountInput.value = lastTotal;
+      }else{
+        paidAmountInput.value = v;
+      }
+      paidAmountInput.dataset.touched = "1";
+    });
+  });
+
   // ---- Clear cart
   document.getElementById("clearCart").addEventListener("click", clearCart);
+
+  // ---- Bottom sticky submit
+  const submitBottom = document.getElementById("submitOrderBottom");
+  if(submitBottom){
+    submitBottom.addEventListener("click", () => {
+      document.getElementById("posForm").requestSubmit();
+    });
+  }
 
   // ---- Initial
   applyFilters();

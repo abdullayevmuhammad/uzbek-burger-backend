@@ -7,6 +7,7 @@ from .models import StockImport, BranchProduct
 from finance.models import Direction, TxnType
 from finance.services import record_cash_txn
 from django.utils import timezone
+from .units import to_base, from_base
 Q0 = Decimal("0")
 Q1 = Decimal("1")
 
@@ -75,7 +76,8 @@ def post_stock_import(stock_import: StockImport, *, by_user=None) -> None:
 
     # 2) Stock + cost apply
     for it in items:
-        unit_cost = _money_div(it.line_total_cost, it.qty)
+        qty_base = to_base(it.qty, it.product.count_type)
+        unit_cost = _money_div(it.line_total_cost, qty_base)
 
         bp = (
             BranchProduct.objects.select_for_update()
@@ -89,17 +91,17 @@ def post_stock_import(stock_import: StockImport, *, by_user=None) -> None:
             except IntegrityError:
                 bp = BranchProduct.objects.select_for_update().get(branch=imp.branch, product=it.product)
 
-        old_qty = bp.stock_qty
-        new_qty = old_qty + it.qty
+        old_qty_base = to_base(bp.stock_qty, bp.product.count_type)
+        new_qty_base = old_qty_base + qty_base
 
-        if old_qty <= Q0:
+        if old_qty_base <= Q0:
             new_avg = unit_cost
         else:
-            numerator = (old_qty * Decimal(bp.avg_unit_cost)) + (it.qty * Decimal(unit_cost))
-            new_avg_dec = (numerator / new_qty).quantize(Q1, rounding=ROUND_HALF_UP)
+            numerator = (old_qty_base * Decimal(bp.avg_unit_cost)) + (qty_base * Decimal(unit_cost))
+            new_avg_dec = (numerator / new_qty_base).quantize(Q1, rounding=ROUND_HALF_UP)
             new_avg = int(new_avg_dec)
 
-        bp.stock_qty = new_qty
+        bp.stock_qty = from_base(new_qty_base, bp.product.count_type)
         bp.last_unit_cost = unit_cost
         bp.avg_unit_cost = new_avg
         bp.save(update_fields=["stock_qty", "last_unit_cost", "avg_unit_cost"])

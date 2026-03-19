@@ -48,6 +48,7 @@ CSRF_COOKIE_SECURE = USE_HTTPS
 SESSION_COOKIE_SECURE = USE_HTTPS
 # Application definition
 ROOT_URLCONF = os.getenv("ROOT_URLCONF", "config.urls")
+POS_MODE = os.getenv("POS_MODE", "1").lower() in ("1", "true", "yes", "on")
 # Optional dependency: django-jazzmin (Admin UI theme)
 HAS_JAZZMIN = False
 try:
@@ -63,6 +64,7 @@ INSTALLED_APPS = ([] if not HAS_JAZZMIN else ['jazzmin']) + [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
 
     "catalog",
     "inventory",
@@ -90,8 +92,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {

@@ -16,7 +16,16 @@ from menu.models import Food, FoodType
 from users.models import StaffRole
 
 from .models import Order, OrderItem
-from .services import mark_delivered, pay_order, recalc_order_totals
+from .services import (
+    OrderValidationError,
+    cancel_order,
+    mark_delivered,
+    pay_order,
+    recalc_order_totals,
+    create_order_with_items,
+    build_receipt_context,
+)
+from finance.utils import parse_uzs_amount
 
 
 def _is_admin_like(user) -> bool:
@@ -135,14 +144,8 @@ def pos_order_create(request):
         raw_items = request.POST.get("items_json") or "[]"
         try:
             items = json.loads(raw_items)
-            if not isinstance(items, list):
-                raise ValueError
         except Exception:
             messages.error(request, "Chek ma'lumotlari xato (items_json).")
-            return redirect("sales:pos_order_create")
-
-        if not items:
-            messages.error(request, "Kamida bitta taom tanlang.")
             return redirect("sales:pos_order_create")
 
         order_type = request.POST.get("order_type") or Order.OrderType.DINE_IN
@@ -159,32 +162,14 @@ def pos_order_create(request):
 
         try:
             with transaction.atomic():
-                order = Order.objects.create(
+                order = create_order_with_items(
                     branch=branch,
+                    created_by=request.user,
                     order_type=order_type,
                     note=note,
-                    created_by=request.user,
+                    items=items,
                 )
 
-                # items
-                for it in items:
-                    food_id = (it.get("food") or "").strip()
-                    qty = int(it.get("qty") or 0)
-
-                    if not food_id or qty <= 0:
-                        continue
-
-                    food = get_object_or_404(Food, id=food_id, branch=branch, is_active=True)
-
-                    OrderItem.objects.create(
-                        order=order,
-                        food=food,
-                        qty=qty,
-                        unit_price=int(food.sell_price),
-                        line_total=0,  # save() qayta hisoblaydi
-                    )
-
-                recalc_order_totals(order)
                 order.refresh_from_db()
 
                 # topshirildi -> stock yechish
@@ -203,7 +188,7 @@ def pos_order_create(request):
                         raise ValueError("Kassa topilmadi. Admin: filialga kassa yarating.")
 
                     if paid_amount_raw:
-                        amount = int(float(paid_amount_raw))
+                        amount = parse_uzs_amount(paid_amount_raw)
                     else:
                         amount = int(order.total_amount)
 
@@ -212,6 +197,9 @@ def pos_order_create(request):
 
                 return redirect("sales:pos_order_detail", pk=order.pk)
 
+        except OrderValidationError as e:
+            messages.error(request, str(e))
+            return redirect("sales:pos_order_create")
         except Exception as e:
             messages.error(request, f"Order yaratilmadi: {e}")
             return redirect("sales:pos_order_create")
@@ -292,9 +280,10 @@ def pos_order_pay(request, pk):
         return redirect("sales:pos_order_detail", pk=pk)
 
     try:
-        amount = int(float(amount_raw))
+        amount = parse_uzs_amount(amount_raw)
     except Exception:
-        amount = 0
+        messages.error(request, "To'lov summasi noto'g'ri.")
+        return redirect("sales:pos_order_detail", pk=pk)
 
     acc = get_object_or_404(MoneyAccount, id=account_id, branch=branch, is_active=True)
 
@@ -333,6 +322,27 @@ def pos_order_deliver(request, pk):
 
 
 @login_required
+@require_POST
+def pos_order_cancel(request, pk):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    order = get_object_or_404(Order, pk=pk, branch=branch)
+
+    try:
+        cancel_order(order, by_user=request.user)
+        messages.success(request, "Buyurtma bekor qilindi.")
+    except Exception as e:
+        messages.error(request, f"Bekor qilishda xatolik: {e}")
+
+    return redirect("sales:pos_order_detail", pk=pk)
+
+
+@login_required
 def pos_menu_json(request):
     """(Ixtiyoriy) Menu JSON — front uchun."""
     try:
@@ -355,6 +365,22 @@ def pos_menu_json(request):
             }
         )
     return JsonResponse({"branch": str(branch.id), "foods": out})
+
+
+@login_required
+def pos_order_receipt(request, pk):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    order = get_object_or_404(Order, pk=pk, branch=branch)
+    paper_width = request.GET.get("paper", "80")
+    ctx = build_receipt_context(order, paper_width=paper_width)
+    ctx.update({"branch": branch})
+    return render(request, "sales/receipt.html", ctx)
 
 
 """Note: order finalize alohida view kerak emas.

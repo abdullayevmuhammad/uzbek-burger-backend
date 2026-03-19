@@ -9,6 +9,8 @@ from users.models import StaffRole
 
 
 def _is_owner(user):
+    if getattr(user, "is_superuser", False):
+        return True
     prof = getattr(user, "profile", None)
     return bool(prof and prof.is_active and prof.role == StaffRole.OWNER)
 
@@ -63,7 +65,7 @@ def post_imports(modeladmin, request, queryset):
 # ====== BRANCH PRODUCT ======
 @admin.register(BranchProduct)
 class BranchProductAdmin(admin.ModelAdmin):
-    list_display = ("branch", "product", "product_count_type", "stock_qty", "avg_unit_cost", "last_unit_cost")
+    list_display = ("branch", "product", "product_count_type", "stock_qty_display", "avg_unit_cost", "last_unit_cost")
     list_filter = ("branch", "product__count_type")
     search_fields = ("branch__name", "product__name", "product__sku", "product__barcode")
     autocomplete_fields = ("branch", "product")
@@ -83,6 +85,10 @@ class BranchProductAdmin(admin.ModelAdmin):
     @admin.display(description="count_type")
     def product_count_type(self, obj):
         return obj.product.count_type
+
+    @admin.display(description="Qoldiq")
+    def stock_qty_display(self, obj):
+        return obj.stock_qty
 
 
 # ====== IMPORT INLINE ======
@@ -134,6 +140,8 @@ class StockImportAdmin(admin.ModelAdmin):
         if _is_owner(request.user):
             return qs
         bid = _staff_branch_id(request.user)
+        if not bid:
+            return qs.none()
         return qs.filter(branch_id=bid)
 
     @admin.display(description="ID")

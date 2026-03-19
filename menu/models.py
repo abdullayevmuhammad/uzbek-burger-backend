@@ -61,6 +61,15 @@ class Food(models.Model):
     def __str__(self):
         return f"{self.name}"
 
+    def clean(self):
+        # Filial yaxlitligi: kategoriya va food bir xil filialga tegishli bo'lishi shart.
+        if self.category_id and self.branch_id and self.category.branch_id != self.branch_id:
+            raise ValidationError({"category": "Kategoriya va taom bir xil filialga tegishli bo'lishi kerak."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 class FoodItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

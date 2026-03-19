@@ -119,6 +119,8 @@ class OrderItem(models.Model):
         # Topshirilgan (stock yechilgan) orderda itemlar o'zgarsa - ombor buziladi
         if self.order.is_delivered or self.order.stock_applied:
             raise ValidationError("Topshirilgan orderda itemlarni o'zgartirib bo'lmaydi.")
+        if self.food and self.order and self.food.branch_id != self.order.branch_id:
+            raise ValidationError("Taom buyurtma bilan bir xil filialga tegishli bo'lishi kerak.")
 
     def save(self, *args, **kwargs):
         # Model-level himoya: admin yoki service'lardan kelgan editlarni ham ushlaymiz

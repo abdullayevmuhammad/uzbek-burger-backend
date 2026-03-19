@@ -10,9 +10,13 @@ from finance.services import record_cash_txn
 
 from users.models import StaffRole
 
+
 def _is_owner(user):
+    if getattr(user, "is_superuser", False):
+        return True
     prof = getattr(user, "profile", None)
     return bool(prof and prof.is_active and prof.role == StaffRole.OWNER)
+
 
 def _staff_branch_id(user):
     prof = getattr(user, "profile", None)
@@ -29,17 +33,17 @@ class OrderItemInline(admin.TabularInline):
     readonly_fields = ("unit_price", "line_total")
 
     def has_add_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_add_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_delete_permission(request, obj)
 
@@ -52,17 +56,17 @@ class OrderPaymentInline(admin.TabularInline):
     readonly_fields = ("cash_txn", "created_at")
 
     def has_add_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_add_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj and (obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
+        if obj and (obj.is_locked or obj.status != Order.Status.DRAFT or getattr(obj, "is_delivered", False)):
             return False
         return super().has_delete_permission(request, obj)
 
@@ -111,6 +115,8 @@ class OrderAdmin(admin.ModelAdmin):
         if _is_owner(request.user):
             return qs
         bid = _staff_branch_id(request.user)
+        if not bid:
+            return qs.none()
         return qs.filter(branch_id=bid)
 
     def save_model(self, request, obj, form, change):

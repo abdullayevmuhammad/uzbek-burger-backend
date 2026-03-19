@@ -32,6 +32,7 @@ services:
     env_file: [.env]
     environment:
       ROOT_URLCONF: config.urls_pos
+      POS_MODE: "1"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -49,6 +50,7 @@ services:
     env_file: [.env]
     environment:
       ROOT_URLCONF: config.urls_landing
+      POS_MODE: "0"
     depends_on:
       init:
         condition: service_completed_successfully
