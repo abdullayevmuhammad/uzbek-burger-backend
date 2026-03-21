@@ -6,6 +6,7 @@ from typing import Any
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Case, When, Value, IntegerField
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
@@ -110,7 +111,16 @@ def pos_order_create(request):
     foods_qs = (
         Food.objects.filter(is_active=True, branch=branch)
         .select_related("category")
-        .order_by("type", "category__sort_order", "sort_order", "name")
+        .annotate(
+            type_priority=Case(
+                When(type=FoodType.FASTFOOD, then=Value(1)),
+                When(type=FoodType.DRINK, then=Value(2)),
+                When(type=FoodType.SET, then=Value(3)),
+                default=Value(99),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("type_priority", "category__sort_order", "sort_order", "name")
     )
 
     foods_json: list[dict[str, Any]] = []
@@ -357,8 +367,19 @@ def pos_menu_json(request):
     except PermissionError:
         return JsonResponse({"error": "no_branch"}, status=403)
 
-    foods_qs = Food.objects.filter(is_active=True, branch=branch).order_by("type", "sort_order", "name")
-
+    foods_qs = (
+        Food.objects.filter(is_active=True, branch=branch)
+        .annotate(
+            type_priority=Case(
+                When(type=FoodType.FASTFOOD, then=Value(1)),
+                When(type=FoodType.DRINK, then=Value(2)),
+                When(type=FoodType.SET, then=Value(3)),
+                default=Value(99),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("type_priority", "category__sort_order", "sort_order", "name")
+    )
     out = []
     for f in foods_qs:
         out.append(
