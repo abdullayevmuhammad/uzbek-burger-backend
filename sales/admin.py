@@ -1,28 +1,18 @@
-# sales/admin.py
 from django.contrib import admin, messages
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Order, OrderItem, OrderPayment
-from .services import recalc_order_totals, apply_stock_for_order_if_needed
 from finance.models import Direction, TxnType
 from finance.services import record_cash_txn
+from users.utils import get_profile, get_user_branch_id, is_admin_user, is_cashier_role_value, is_super_recovery_user
 
-from users.models import StaffRole
-
-
-def _is_owner(user):
-    if getattr(user, "is_superuser", False):
-        return True
-    prof = getattr(user, "profile", None)
-    return bool(prof and prof.is_active and prof.role == StaffRole.OWNER)
-
-
-def _staff_branch_id(user):
-    prof = getattr(user, "profile", None)
-    if not prof or not prof.is_active:
-        return None
-    return prof.branch_id
+from .models import Order, OrderItem, OrderPayment, KitchenTask
+from .services import (
+    apply_stock_for_order_if_needed,
+    delete_order_for_recovery,
+    delete_orders_for_recovery,
+    recalc_order_totals,
+)
 
 
 class OrderItemInline(admin.TabularInline):
@@ -74,37 +64,36 @@ class OrderPaymentInline(admin.TabularInline):
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
     inlines = (OrderItemInline, OrderPaymentInline)
-
     list_display = ("id_short", "branch", "order_type", "status", "paid_amount", "created_at", "total_amount", "cogs_amount", "profit_amount")
     list_filter = ("branch", "status", "order_type", "is_delivered")
     search_fields = ("id", "note")
     date_hierarchy = "created_at"
     ordering = ("-created_at",)
-
     readonly_fields = ("status", "total_amount", "paid_amount", "created_at", "paid_at", "stock_applied", "is_locked", "locked_at", "locked_by")
     fields = ("branch", "order_type", "is_delivered", "status", "note", "total_amount", "paid_amount", "created_at", "paid_at", "stock_applied", "is_locked", "locked_at", "locked_by")
 
+    def has_module_permission(self, request):
+        return is_admin_user(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_admin_user(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        return is_super_recovery_user(request.user)
+
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))
-        # Branch har doim o'zgarmasin
         if obj is not None:
             ro += ["branch"]
 
-        # Yakunlangan order: hammasi READONLY (tahrir yo'q)
         if obj is not None and getattr(obj, "is_locked", False):
             all_fields = [f.name for f in obj._meta.fields]
             ro += all_fields
 
-        # Topshirilgan order: is_delivered qaytarilmasin (stock buziladi)
         if obj is not None and getattr(obj, "is_delivered", False):
             ro += ["is_delivered"]
 
         return tuple(dict.fromkeys(ro))
-
-    def has_delete_permission(self, request, obj=None):
-        if obj is not None and (getattr(obj, "is_locked", False) or getattr(obj, "stock_applied", False)):
-            return False
-        return super().has_delete_permission(request, obj)
 
     @admin.display(description="ID")
     def id_short(self, obj: Order):
@@ -112,9 +101,9 @@ class OrderAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if _is_owner(request.user):
+        if is_admin_user(request.user):
             return qs
-        bid = _staff_branch_id(request.user)
+        bid = get_user_branch_id(request.user)
         if not bid:
             return qs.none()
         return qs.filter(branch_id=bid)
@@ -123,32 +112,26 @@ class OrderAdmin(admin.ModelAdmin):
         if not change and obj.created_by_id is None:
             obj.created_by = request.user
 
-        # STAFF bo'lsa branchni majburan o'z profilidan olamiz
-        prof = getattr(request.user, "profile", None)
-        if prof and prof.is_active and prof.role == StaffRole.STAFF:
+        prof = get_profile(request.user)
+        if prof and getattr(prof, "is_active", False) and is_cashier_role_value(getattr(prof, "role", None)):
             obj.branch_id = prof.branch_id
 
         super().save_model(request, obj, form, change)
-
 
     @transaction.atomic
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         order = form.instance
 
-        # Yakunlangan buyurtma: admin orqali ham hisob-kitob/stock/cash ni o'zgartirmaymiz
         if getattr(order, "is_locked", False):
             return
 
-        # 1) totals
         recalc_order_totals(order)
         order.refresh_from_db()
 
-        # 2) cash_txn yo'q paymentlar uchun kassaga yozuv yarat
         created_cnt = 0
         payments = (
-            order.payments
-            .select_related("account")
+            order.payments.select_related("account")
             .select_for_update()
             .filter(cash_txn__isnull=True)
         )
@@ -162,6 +145,8 @@ class OrderAdmin(admin.ModelAdmin):
                 direction=Direction.IN_,
                 txn_type=TxnType.SALE,
                 amount=int(p.amount),
+                actor=request.user,
+                reason="Order payment",
                 note=f"Order {str(order.id)[:8]} payment",
                 occurred_at=p.created_at or timezone.now(),
                 ref_type="order_payment",
@@ -174,7 +159,6 @@ class OrderAdmin(admin.ModelAdmin):
         if created_cnt:
             self.message_user(request, f"{created_cnt} ta payment uchun cash_txn yaratildi.", level=messages.SUCCESS)
 
-        # 3) totals/status
         recalc_order_totals(order)
         order.refresh_from_db()
 
@@ -185,10 +169,40 @@ class OrderAdmin(admin.ModelAdmin):
                 order.paid_by = order.paid_by or request.user
                 order.save(update_fields=["status", "paid_at", "paid_by"])
 
-            # 4) stock apply (idempotent) — faqat topshirilgan bo‘lsa
             if getattr(order, "is_delivered", False):
                 apply_stock_for_order_if_needed(order)
         else:
-            # PAID'ni qaytarish mumkin emas (cash+stock buziladi)
             if order.status == Order.Status.PAID:
                 raise ValueError("PAID orderni qaytadan DRAFT qilish mumkin emas.")
+
+    def delete_model(self, request, obj):
+        delete_order_for_recovery(obj, actor=request.user)
+        self.message_user(request, "Buyurtma va unga bog'liq to'lov/cash yozuvlari o'chirildi.", level=messages.SUCCESS)
+
+    def delete_queryset(self, request, queryset):
+        deleted_count = delete_orders_for_recovery(queryset=queryset, actor=request.user)
+        self.message_user(request, f"{deleted_count} ta buyurtma recovery tartibida o'chirildi.", level=messages.SUCCESS)
+
+
+@admin.register(KitchenTask)
+class KitchenTaskAdmin(admin.ModelAdmin):
+    list_display = ("order", "branch", "status", "created_at", "updated_at")
+    list_filter = ("branch", "status")
+    search_fields = ("order__id", "items_snapshot", "note")
+    readonly_fields = ("created_at", "updated_at", "items_snapshot")
+    autocomplete_fields = ("order", "branch", "created_by", "updated_by")
+
+    def has_module_permission(self, request):
+        return is_admin_user(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_admin_user(request.user)
+
+    def has_add_permission(self, request):
+        return is_super_recovery_user(request.user)
+
+    def has_change_permission(self, request, obj=None):
+        return is_admin_user(request.user)
+
+    def has_delete_permission(self, request, obj=None):
+        return is_super_recovery_user(request.user)

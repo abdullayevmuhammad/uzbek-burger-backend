@@ -1,6 +1,7 @@
 # inventory/models.py
 import uuid
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from core.models import Branch
 from catalog.models import Product
@@ -69,6 +70,15 @@ class StockImport(models.Model):
 
     def __str__(self):
         return f"{self.branch.name} | {str(self.id)[:8]}"
+
+    def clean(self):
+        if self.branch_id and not self.branch.is_active:
+            raise ValidationError({"branch": "Arxivlangan filial uchun import yaratib bo'lmaydi."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = "Ombor importi"
         verbose_name_plural = "Ombor importlari"

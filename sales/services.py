@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from finance.models import Direction, TxnType
-from finance.services import record_cash_txn
+from core.services import ensure_branch_is_operational
+from finance.models import CashTransaction, Direction, TxnType
+from finance.services import recalculate_account_balances, record_cash_txn
 from finance.utils import parse_uzs_amount
 from inventory.models import BranchProduct
-from inventory.units import to_base, from_base
+from inventory.units import from_base, to_base
 from menu.models import Food, FoodItem, FoodType, SetItem
-from sales.models import Order, OrderItem, OrderPayment
+from sales.models import Order, OrderItem, OrderPayment, KitchenTask
+from users.utils import get_profile, is_cashier_role_value, is_super_recovery_user
 
 
 class OrderValidationError(ValueError):
@@ -20,12 +25,6 @@ class OrderValidationError(ValueError):
 
 
 def validate_order_items(branch, raw_items):
-    """
-    Validate incoming items payload.
-    - Ensures qty > 0
-    - Filters out invalid/foreign foods
-    - Coalesces duplicate foods
-    """
     if not isinstance(raw_items, list):
         raise ValueError("Items payload xato.")
 
@@ -49,7 +48,7 @@ def validate_order_items(branch, raw_items):
 
         try:
             food = Food.objects.get(id=food_id, branch=branch, is_active=True)
-        except Food.DoesNotExist:
+        except (Food.DoesNotExist, ValidationError, ValueError):
             invalid_items.append({"index": index, "food": food_id, "reason": "food"})
             continue
 
@@ -81,6 +80,7 @@ def validate_order_items(branch, raw_items):
 
 @transaction.atomic
 def create_order_with_items(*, branch, created_by, order_type, note, items: list[dict]) -> Order:
+    ensure_branch_is_operational(branch)
     validated = validate_order_items(branch, items)
 
     order = Order.objects.create(
@@ -117,7 +117,6 @@ def create_order_with_items(*, branch, created_by, order_type, note, items: list
 
 @transaction.atomic
 def recalc_order_totals(order: Order) -> None:
-    """Order total_amount va paid_amount ni qayta hisoblaydi (idempotent)."""
     o = Order.objects.select_for_update().get(pk=order.pk)
 
     agg = o.items.aggregate(s=Sum("line_total"))
@@ -131,13 +130,8 @@ def recalc_order_totals(order: Order) -> None:
 
 @transaction.atomic
 def add_item(order: Order, *, food, qty: int) -> OrderItem:
-    """DRAFT orderga item qo'shadi (bir xil food bo'lsa qty oshiradi)."""
     o = Order.objects.select_for_update().get(pk=order.pk)
 
-    # Muhim qoida:
-    #  - DRAFT bo'lmagan order edit qilinmaydi
-    #  - TOPSHIRILGAN (stock_applied) orderda item o'zgartirish mumkin emas (stock buziladi)
-    #  - YAKUNLANGAN (is_locked) orderda umuman edit yo'q
     if o.is_locked:
         raise ValueError("Order yakunlangan. Endi item qo'shib bo'lmaydi")
     if o.is_delivered or o.stock_applied:
@@ -164,8 +158,6 @@ def add_item(order: Order, *, food, qty: int) -> OrderItem:
     return item
 
 
-from decimal import Decimal
-
 def _consume_stock_for_order(order: Order) -> None:
     if order.stock_applied:
         return
@@ -191,9 +183,8 @@ def _consume_stock_for_order(order: Order) -> None:
             if stock_qty_base < need_qty_base:
                 raise ValueError(f"Stock yetarli emas: {ri.product.name} ({stock_qty_base} < {need_qty_base})")
 
-            # ✅ COGS snapshot: shu paytdagi avg_unit_cost bilan
             unit_cost = bp.avg_unit_cost or Decimal("0.00")
-            cogs += (unit_cost * need_qty_base)
+            cogs += unit_cost * need_qty_base
 
             new_stock_base = stock_qty_base - need_qty_base
             bp.stock_qty = from_base(new_stock_base, ri.product.count_type)
@@ -222,16 +213,45 @@ def _consume_stock_for_order(order: Order) -> None:
 
         raise ValueError(f"Food type not supported for stock consume: {f.type}")
 
-    # ✅ Orderga snapshot yozamiz
     order.cogs_amount = total_cogs
     order.profit_amount = (order.total_amount or Decimal("0.00")) - total_cogs
     order.stock_applied = True
     order.save(update_fields=["cogs_amount", "profit_amount", "stock_applied"])
 
+
+def _restore_stock_for_order(order: Order) -> None:
+    items = order.items.select_related("food").all()
+
+    def add_back(food, qty_multiplier: int):
+        recipe = FoodItem.objects.filter(food=food).select_related("product")
+        for ri in recipe:
+            qty_base = to_base(ri.qty, ri.product.count_type) * int(qty_multiplier)
+            bp, _ = BranchProduct.objects.select_for_update().get_or_create(
+                branch=order.branch,
+                product=ri.product,
+                defaults={"stock_qty": from_base(Decimal("0"), ri.product.count_type), "avg_unit_cost": 0},
+            )
+            current_base = to_base(bp.stock_qty, ri.product.count_type)
+            bp.stock_qty = from_base(current_base + qty_base, ri.product.count_type)
+            bp.save(update_fields=["stock_qty"])
+
+    for oi in items:
+        f = oi.food
+        if f.type in [FoodType.FASTFOOD, FoodType.DRINK]:
+            add_back(f, oi.qty)
+            continue
+        if f.type == FoodType.SET:
+            set_components = SetItem.objects.filter(set_food=f).select_related("food")
+            for si in set_components:
+                total_qty = int(oi.qty) * int(si.qty)
+                add_back(si.food, total_qty)
+            continue
+
+
 @transaction.atomic
 def apply_stock_for_order_if_needed(order: Order) -> None:
-    """Order topshirilgan bo'lsa va stock hali yechilmagan bo'lsa, ingredientlarni yechadi."""
-    o = Order.objects.select_for_update().get(pk=order.pk)
+    o = Order.objects.select_for_update().select_related("branch").get(pk=order.pk)
+    ensure_branch_is_operational(o.branch)
 
     if o.stock_applied:
         return
@@ -246,11 +266,10 @@ def apply_stock_for_order_if_needed(order: Order) -> None:
 
 @transaction.atomic
 def mark_delivered(order: Order, *, by_user=None) -> Order:
-    """Orderni 'topshirildi' deb belgilaydi va stockni (1 marta) yechadi."""
-    o = Order.objects.select_for_update().get(pk=order.pk)
+    o = Order.objects.select_for_update().select_related("branch").get(pk=order.pk)
+    ensure_branch_is_operational(o.branch)
 
     if o.is_delivered:
-        # baribir stock_applied bo'lmasa, idempotent tarzda yechamiz
         apply_stock_for_order_if_needed(o)
         return o
 
@@ -269,7 +288,6 @@ def mark_delivered(order: Order, *, by_user=None) -> Order:
 
     apply_stock_for_order_if_needed(o)
 
-    # Agar order allaqachon to'liq to'langan bo'lsa -> yakunlaymiz
     if o.status == Order.Status.PAID and not o.is_locked:
         o.is_locked = True
         o.locked_at = timezone.now()
@@ -281,23 +299,23 @@ def mark_delivered(order: Order, *, by_user=None) -> Order:
 
 @transaction.atomic
 def pay_order(order: Order, *, account, amount: int, note: str | None = None, by_user) -> OrderPayment:
-    """Orderga to'lov yozadi va kassaga (cash_txn) tushum yozadi."""
-    o = Order.objects.select_for_update().get(pk=order.pk)
+    o = Order.objects.select_for_update().select_related("branch").get(pk=order.pk)
+    ensure_branch_is_operational(o.branch)
 
     if o.is_locked:
         raise ValueError("Order yakunlangan. Endi to'lov qo'shib bo'lmaydi")
     if o.status == Order.Status.CANCELED:
         raise ValueError("Bekor qilingan order uchun to'lov qila olmaysiz.")
 
-    # STAFF faqat o'z filialidagi orderni pay qila oladi
-    prof = getattr(by_user, "profile", None)
-    if prof and prof.is_active and prof.role == "staff":
+    prof = get_profile(by_user)
+    if prof and getattr(prof, "is_active", False) and is_cashier_role_value(getattr(prof, "role", None)):
         if prof.branch_id != o.branch_id:
             raise ValueError("Forbidden: boshqa filial orderini pay qila olmaysiz.")
 
-    # Account ham shu filialniki bo'lsin
     if account.branch_id != o.branch_id:
         raise ValueError("Payment account boshqa filialga tegishli.")
+    if not account.branch.is_active:
+        raise ValueError("Arxivlangan filial uchun payment qabul qilib bo'lmaydi.")
 
     if o.status == Order.Status.PAID:
         raise ValueError("Order already PAID")
@@ -313,12 +331,13 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None, by
 
     p = OrderPayment.objects.create(order=o, account=account, amount=amount_int)
 
-    # cash txn (IN)
     tx = record_cash_txn(
         account=account,
         direction=Direction.IN_,
         txn_type=TxnType.SALE,
         amount=amount_int,
+        actor=by_user,
+        reason="Order payment",
         note=note or f"Order {str(o.id)[:8]} payment",
         occurred_at=timezone.now(),
         ref_type="order_payment",
@@ -327,11 +346,9 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None, by
     p.cash_txn = tx
     p.save(update_fields=["cash_txn"])
 
-    # totals update
     recalc_order_totals(o)
     o.refresh_from_db(fields=["total_amount", "paid_amount", "status", "is_delivered", "is_locked"])
 
-    # agar to‘liq yopildi -> PAID
     if o.total_amount > 0 and o.paid_amount >= o.total_amount:
         if o.status != Order.Status.PAID:
             o.status = Order.Status.PAID
@@ -339,7 +356,6 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None, by
             o.paid_by = by_user
             o.save(update_fields=["status", "paid_at", "paid_by"])
 
-        # Agar topshirilgan bo'lsa -> yakunlaymiz
         if o.is_delivered and not o.is_locked:
             o.is_locked = True
             o.locked_at = timezone.now()
@@ -351,8 +367,8 @@ def pay_order(order: Order, *, account, amount: int, note: str | None = None, by
 
 @transaction.atomic
 def cancel_order(order: Order, *, by_user=None) -> Order:
-    """Safer option: cancel only while DRAFT and unpaid & undelivered."""
-    o = Order.objects.select_for_update().get(pk=order.pk)
+    o = Order.objects.select_for_update().select_related("branch").get(pk=order.pk)
+    ensure_branch_is_operational(o.branch)
     if o.is_locked or o.status == Order.Status.PAID:
         raise ValueError("Yakunlangan yoki to'langan orderni bekor qilib bo'lmaydi.")
     if o.is_delivered or o.stock_applied:
@@ -365,8 +381,59 @@ def cancel_order(order: Order, *, by_user=None) -> Order:
     return o
 
 
-def build_receipt_context(order: Order, *, paper_width: str = "80") -> dict:
-    """Receipt uchun kerakli snapshot ma'lumotlarni qaytaradi."""
+@transaction.atomic
+def delete_order_for_recovery(order: Order, *, actor) -> None:
+    if not is_super_recovery_user(actor):
+        raise PermissionError("Orderni recovery delete qilish faqat superuser uchun.")
+
+    o = Order.objects.select_for_update().get(pk=order.pk)
+    if o.stock_applied:
+        _restore_stock_for_order(o)
+
+    payments = list(
+        OrderPayment.objects.filter(order=o).select_related("cash_txn")
+    )
+    account_ids = [p.cash_txn.account_id for p in payments if p.cash_txn_id]
+    cash_txn_ids = [p.cash_txn_id for p in payments if p.cash_txn_id]
+
+    if cash_txn_ids:
+        CashTransaction.objects.filter(pk__in=cash_txn_ids).delete()
+    OrderPayment.objects.filter(order=o).delete()
+    OrderItem.objects.filter(order=o).delete()
+    o.delete()
+
+    if account_ids:
+        recalculate_account_balances(account_ids)
+
+
+@transaction.atomic
+def delete_orders_for_recovery(*, queryset, actor) -> int:
+    if not is_super_recovery_user(actor):
+        raise PermissionError("Orderlarni recovery delete qilish faqat superuser uchun.")
+
+    order_ids = list(queryset.values_list("id", flat=True))
+    if not order_ids:
+        return 0
+
+    payments = list(
+        OrderPayment.objects.filter(order_id__in=order_ids).select_related("cash_txn")
+    )
+    account_ids = [p.cash_txn.account_id for p in payments if p.cash_txn_id]
+    cash_txn_ids = [p.cash_txn_id for p in payments if p.cash_txn_id]
+
+    if cash_txn_ids:
+        CashTransaction.objects.filter(pk__in=cash_txn_ids).delete()
+    OrderPayment.objects.filter(order_id__in=order_ids).delete()
+    OrderItem.objects.filter(order_id__in=order_ids).delete()
+    deleted_count, _ = Order.objects.filter(pk__in=order_ids).delete()
+
+    if account_ids:
+        recalculate_account_balances(account_ids)
+
+    return deleted_count
+
+
+def build_receipt_context(order: Order) -> dict:
     o = (
         Order.objects.select_related("branch", "created_by", "paid_by", "delivered_by")
         .prefetch_related("items__food", "payments__account")
@@ -404,5 +471,22 @@ def build_receipt_context(order: Order, *, paper_width: str = "80") -> dict:
         "due": due,
         "paid_amount": int(o.paid_amount),
         "total_amount": int(o.total_amount),
-        "paper_width": "58" if str(paper_width) == "58" else "80",
+        "paper_width": "58",
     }
+
+
+@transaction.atomic
+def ensure_kitchen_task(order: Order, *, actor=None) -> KitchenTask:
+    o = Order.objects.select_related("branch").get(pk=order.pk)
+    task, created = KitchenTask.objects.select_for_update().get_or_create(
+        order=o,
+        defaults={
+            "branch": o.branch,
+            "created_by": actor,
+            "updated_by": actor,
+        },
+    )
+    task.refresh_from_order()
+    task.updated_by = actor
+    task.save(update_fields=["items_snapshot", "updated_by", "updated_at"])
+    return task

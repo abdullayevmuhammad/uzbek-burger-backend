@@ -1,0 +1,16 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+  <h1>{{ title }}</h1>
+  <p>This permanently deletes the branch and all branch-linked data, including orders, payments, cash history, imports, stock, and menu records.</p>
+  <p><strong>Branch:</strong> {{ branch.name }}</p>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="submit-row">
+      <input type="submit" value="Purge Permanently" class="default">
+    </div>
+  </form>
+</div>
+{% endblock %}

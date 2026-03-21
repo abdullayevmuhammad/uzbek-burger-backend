@@ -4,13 +4,13 @@ from django.shortcuts import redirect
 from django.urls import NoReverseMatch, reverse
 
 from core.models import Branch
-from users.models import StaffRole
+from users.utils import can_access_admin, get_profile, is_admin_user
 
 ACTIVE_BRANCH_SESSION_KEY = "active_branch_id"
 
 
 def _get_profile(user):
-    return getattr(user, "profile", None) or getattr(user, "staffprofile", None)
+    return get_profile(user)
 
 
 def _get_role(user):
@@ -19,11 +19,7 @@ def _get_role(user):
 
 
 def _is_admin_like(user) -> bool:
-    if user.is_superuser:
-        return True
-    profile = getattr(user, "profile", None)
-    role = getattr(profile, "role", None) if profile else None
-    return role == StaffRole.OWNER
+    return is_admin_user(user)
 
 
 def _get_select_branch_path():
@@ -37,7 +33,7 @@ class ActiveBranchMiddleware:
     """
     request.active_branch:
       - admin-like: session'dan
-      - staff: profile.branch'dan
+      - cashier: profile.branch'dan
     POS mode o'chirilgan bo'lsa middleware umuman ishlamaydi.
     """
 
@@ -65,10 +61,11 @@ class ActiveBranchMiddleware:
                         return redirect(select_branch_path)
                     request.active_branch = None
                     return self.get_response(request)
-                request.active_branch = Branch.objects.filter(id=branch_id).first()
+                request.active_branch = Branch.objects.filter(id=branch_id, is_active=True).first()
             else:
                 profile = _get_profile(request.user)
-                request.active_branch = getattr(profile, "branch", None) if profile else None
+                branch = getattr(profile, "branch", None) if profile else None
+                request.active_branch = branch if getattr(branch, "is_active", False) else None
 
         return self.get_response(request)
 
@@ -79,7 +76,7 @@ def get_active_branch(request):
 
 
 class AdminGuardMiddleware:
-    """Oddiy operatorlarni /admin/ ga kiritmaslik."""
+    """Cashierlarni /admin/ ga kiritmaslik."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -87,9 +84,6 @@ class AdminGuardMiddleware:
     def __call__(self, request):
         if request.path.startswith("/admin/"):
             user = getattr(request, "user", None)
-            if user and user.is_authenticated:
-                profile = getattr(user, "profile", None)
-                role = getattr(profile, "role", None) if profile else None
-                if not (user.is_superuser or role == StaffRole.OWNER):
-                    return HttpResponseForbidden("Admin panel faqat admin uchun.")
+            if user and user.is_authenticated and not can_access_admin(user):
+                return HttpResponseForbidden("Admin panel faqat admin uchun.")
         return self.get_response(request)

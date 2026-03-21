@@ -1,11 +1,12 @@
-from users.models import StaffRole
+from users.utils import get_profile, is_admin_user
+
 
 def app_context(request):
     user = request.user
-    prof = getattr(user, "profile", None)
+    prof = get_profile(user)
 
     role = getattr(prof, "role", None) if prof else None
-    is_admin_like = bool(user.is_authenticated and (user.is_superuser or role == StaffRole.OWNER))
+    is_admin_like = bool(user.is_authenticated and is_admin_user(user))
 
     return {
         "active_branch": getattr(request, "active_branch", None),

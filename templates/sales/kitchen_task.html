@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Oshxona vazifasi{% endblock %}
+
+{% block content %}
+<div class="pos-page-head">
+  <div>
+    <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
+    <h1 class="pos-h1">Oshxona vazifasi #{{ order.id|stringformat:"s"|slice:":8" }}</h1>
+    <div class="muted" style="margin-top:6px;">
+      {{ order.created_at|date:"d.m.Y H:i" }} • {{ order.get_order_type_display }}
+    </div>
+  </div>
+  <div class="pos-head-actions" style="gap:10px;flex-wrap:wrap;">
+    <a class="btn" href="{% url 'sales:pos_order_detail' order.pk %}">Buyurtmaga qaytish</a>
+  </div>
+</div>
+
+<div class="pos-two-col">
+  <div class="pos-card">
+    <div class="pos-card-title">Tayyorlanadigan taomlar</div>
+    <div class="pos-lines">
+      {% for it in items %}
+        <div class="pos-line">
+          <div class="pos-line-main">
+            <div class="pos-line-name">{{ it.food.name }}</div>
+            <div class="muted">{{ it.qty }} × {{ it.unit_price }}</div>
+          </div>
+          <div class="pos-line-total"><b>{{ it.qty }} dona</b></div>
+        </div>
+      {% empty %}
+        <div class="empty-cart">Taomlar kiritilmagan.</div>
+      {% endfor %}
+    </div>
+    {% if order.note %}
+      <div class="pos-section" style="margin-top:12px;">
+        <div class="pos-section-title">Buyurtma izohi</div>
+        <div>{{ order.note }}</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="pos-card">
+    <div class="pos-card-title">Holat</div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="pos-section">
+        <div class="pos-field">
+          <label>Vazifa holati</label>
+          <select class="control" name="status">
+            {% for val,label in task.Status.choices %}
+              <option value="{{ val }}" {% if task.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Holatni saqlash</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">
+        Yaratildi: {{ task.created_at|date:"d.m.Y H:i" }}<br>
+        Yangilandi: {{ task.updated_at|date:"d.m.Y H:i" }}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

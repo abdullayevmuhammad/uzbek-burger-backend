@@ -22,7 +22,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-test-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG", "0").lower() in ("1", "true", "yes", "on")
@@ -197,7 +197,7 @@ JAZZMIN_SETTINGS = {
     "site_logo": "img/favicon.svg",
     "login_logo": "img/favicon.svg",
     "site_logo_classes": "img-circle",
-    "custom_css": "admin/ub_admin.css",
+    # "custom_css": "admin/ub_admin.css",
     "changeform_format":"single",
     # Top menu
     "topmenu_links": [
@@ -221,24 +221,22 @@ JAZZMIN_SETTINGS = {
 }
 
 JAZZMIN_UI_TWEAKS = {
-    "theme": "darkly",                 # bazaviy dark
-    "navbar": "navbar-dark",
+    "theme": "flatly",                 # light, day-friendly
+    "navbar": "navbar-light",
     "navbar_fixed": True,
-
-    "sidebar": "sidebar-dark-primary",
+    "sidebar": "sidebar-light-primary",
     "sidebar_fixed": True,
-
-    "accent": "accent-success",        # yashil accent
+    "accent": "accent-success",
     "brand_small_text": False,
-
+    "dark_mode_theme": None,
     "button_classes": {
         "primary": "btn btn-success",
-        "secondary": "btn btn-outline-light",
+        "secondary": "btn btn-outline-secondary",
         "info": "btn btn-outline-info",
         "warning": "btn btn-outline-warning",
         "danger": "btn btn-outline-danger",
         "success": "btn btn-success",
-    }
+    },
 }
 
 

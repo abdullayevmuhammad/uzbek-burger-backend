@@ -16,8 +16,15 @@
   <div class="pos-head-actions" style="gap:10px; flex-wrap:wrap;">
     <a class="btn" href="{% url 'sales:pos_orders' %}">Orqaga</a>
     <a class="btn btn-primary" href="{% url 'sales:pos_order_create' %}">Yangi buyurtma</a>
-    <a class="btn" href="{% url 'sales:pos_order_receipt' order.pk %}?paper=80" target="_blank" rel="noopener">Chek 80mm</a>
-    <a class="btn" href="{% url 'sales:pos_order_receipt' order.pk %}?paper=58" target="_blank" rel="noopener">Chek 58mm</a>
+      <button class="btn" type="button" onclick="printReceipt('{{ order.pk }}')">Chekni chop etish</button>
+  <button class="btn btn-ghost" type="button" onclick="printKitchenTask('{{ order.pk }}')">Oshxona task chop etish</button>
+    {% comment %} <a class="btn" href="{% url 'sales:pos_order_receipt' order.pk %}" target="_blank" rel="noopener">
+  Chekni chop etish
+    </a> {% endcomment %}
+
+    {% comment %} <a class="btn" href="{% url 'sales:pos_order_receipt' order.pk %}?paper=80" target="_blank" rel="noopener">Chek 80mm</a> {% endcomment %}
+    {% comment %} <a class="btn" href="{% url 'sales:pos_order_receipt' order.pk %}?paper=58" target="_blank" rel="noopener">Chek 58mm</a> {% endcomment %}
+    {% comment %} <a class="btn btn-ghost" href="{% url 'sales:pos_order_kitchen' order.pk %}">Oshxona vazifasi</a> {% endcomment %}
   </div>
 </div>
 
@@ -166,4 +173,71 @@
     </div>
   </div>
 </div>
+<script>
+async function sendToLocalPrinter(data) {
+  const printResp = await fetch("http://127.0.0.1:9101/print", {
+    method: "POST",
+    mode: "cors",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(data)
+  });
+
+  const rawText = await printResp.text();
+
+  let printData = {};
+  try {
+    printData = JSON.parse(rawText);
+  } catch (e) {
+    printData = { ok: false, error: rawText || "Noto'g'ri javob" };
+  }
+
+  if (!printResp.ok || !printData.ok) {
+    throw new Error(printData.error || `Printer service xato qaytardi (${printResp.status})`);
+  }
+}
+
+async function printReceipt(orderId) {
+  try {
+    const resp = await fetch(`/pos/order/${orderId}/receipt-data/`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error("receipt-data error:", resp.status, txt);
+      alert("Chek ma'lumotini olishda xato.");
+      return;
+    }
+
+    const data = await resp.json();
+    await sendToLocalPrinter(data);
+  } catch (e) {
+    console.error(e);
+    alert("Printer service bilan bog'lanib bo'lmadi.");
+  }
+}
+
+async function printKitchenTask(orderId) {
+  try {
+    const resp = await fetch(`/pos/order/${orderId}/kitchen-print-data/`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" }
+    });
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error("kitchen-print-data error:", resp.status, txt);
+      alert("Oshxona task ma'lumotini olishda xato.");
+      return;
+    }
+
+    const data = await resp.json();
+    await sendToLocalPrinter(data);
+  } catch (e) {
+    console.error(e);
+    alert("Printer service bilan bog'lanib bo'lmadi.");
+  }
+}
+</script>
 {% endblock %}

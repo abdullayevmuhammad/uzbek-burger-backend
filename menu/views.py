@@ -3,22 +3,18 @@ from __future__ import annotations
 from collections import OrderedDict
 
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.http import JsonResponse, Http404
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from core.middleware import get_active_branch
-from users.models import StaffRole
+from users.utils import is_admin_user
 
 from .forms import FoodForm
-from .models import Food, FoodType, FoodCategory
+from .models import Food, FoodCategory, FoodType
 
 
 def _is_admin_like(user) -> bool:
-    if user.is_superuser:
-        return True
-    prof = getattr(user, "profile", None) or getattr(user, "staffprofile", None)
-    role = getattr(prof, "role", None) if prof else None
-    return role == StaffRole.OWNER
+    return is_admin_user(user)
 
 
 def _staff_only(user) -> bool:
@@ -27,7 +23,6 @@ def _staff_only(user) -> bool:
 
 def _type_label(value) -> str:
     try:
-        # TextChoices
         return dict(FoodType.choices).get(value, str(value))
     except Exception:
         return str(value)
@@ -37,10 +32,9 @@ def _type_label(value) -> str:
 def menu_board(request):
     branch = get_active_branch(request)
 
-    mode = request.GET.get("type")  # FASTFOOD / DRINK / SET
+    mode = request.GET.get("type")
     cat = request.GET.get("cat")
 
-    # default = ALL
     if not mode:
         mode = "ALL"
 
@@ -53,7 +47,7 @@ def menu_board(request):
         "branch": branch,
         "FoodType": FoodType,
         "mode": mode,
-        "active_type": mode,  # backward compat (templates)
+        "active_type": mode,
         "active_cat": cat,
         "categories": [],
         "foods": [],
@@ -62,9 +56,9 @@ def menu_board(request):
 
     if mode == "ALL":
         foods = qs.order_by("type", "category__name", "sort_order", "name")
-        grouped: "OrderedDict[tuple[str,str,str], list]" = OrderedDict()
+        grouped: "OrderedDict[tuple[str, str, str], list]" = OrderedDict()
         for f in foods:
-            t_lbl = _type_label(getattr(f, "type", "")) or "—"
+            t_lbl = _type_label(getattr(f, "type", "")) or "-"
             c_obj = getattr(f, "category", None)
             c_lbl = getattr(c_obj, "name", None) or "Boshqa"
             c_id = str(getattr(c_obj, "id", "")) if c_obj else ""
@@ -73,12 +67,10 @@ def menu_board(request):
         context["groups"] = list(grouped.items())
         return render(request, "menu/board.html", context)
 
-    # mode = one type
     foods = qs.filter(type=mode)
     if cat:
         foods = foods.filter(category_id=cat)
 
-    # categories list for filter
     try:
         cqs = FoodCategory.objects.all()
         if branch:
@@ -94,7 +86,6 @@ def menu_board(request):
 
 @login_required
 def food_json(request, food_id):
-    """Food dialog uchun JSON. Variantlar ishlatilmaydi."""
     branch = get_active_branch(request)
     qs = Food.objects.all()
     if branch:
@@ -118,27 +109,26 @@ def food_json(request, food_id):
     items = []
     try:
         for it in food.items.select_related("product").all():
-            items.append({
-                "product": getattr(it.product, "name", str(it.product)),
-                "qty": str(it.qty),
-                "unit": getattr(it.product, "count_type", ""),
-            })
+            items.append(
+                {
+                    "product": getattr(it.product, "name", str(it.product)),
+                    "qty": str(it.qty),
+                    "unit": getattr(it.product, "count_type", ""),
+                }
+            )
     except Exception:
         items = []
 
-    return JsonResponse({
-        "id": str(food.id),
-        "name": food.name,
-        "sell_price": int(getattr(food, "sell_price", 0) or 0),
-        "image": image_url,
-        "category": cat_name,
-        "items": items,
-    })
-
-
-# -------------------------
-# CRUD (staff only)
-# -------------------------
+    return JsonResponse(
+        {
+            "id": str(food.id),
+            "name": food.name,
+            "sell_price": int(getattr(food, "sell_price", 0) or 0),
+            "image": image_url,
+            "category": cat_name,
+            "items": items,
+        }
+    )
 
 
 @user_passes_test(_staff_only)
@@ -184,10 +174,14 @@ def food_edit(request, food_id):
     else:
         form = FoodForm(instance=food)
 
-    return render(request, "menu/food_edit.html", {
-        "food": food,
-        "form": form,
-    })
+    return render(
+        request,
+        "menu/food_edit.html",
+        {
+            "food": food,
+            "form": form,
+        },
+    )
 
 
 @user_passes_test(_staff_only)

@@ -16,7 +16,6 @@
   {% block extra_head %}{% endblock %}
 
   <script>
-    // Apply theme ASAP (prevents flash)
     (function () {
       try {
         var t = localStorage.getItem("ub_theme") || "system";
@@ -26,8 +25,9 @@
   </script>
 </head>
 
-<body>
-  <div class="shell">
+<body class="{{ body_class|default:'' }}">
+  <div class="shell{% if hide_sidebar %} no-sidebar{% endif %}">
+    {% if not hide_sidebar %}
     <aside class="sidebar">
       <div class="brand">
         <img src="{% static 'img/favicon.svg' %}" alt="UzbekBurger">
@@ -37,7 +37,6 @@
         </div>
       </div>
 
-      
       <nav class="nav">
         <a href="{% url 'sales:pos_orders' %}" class="{% if request.path|slice:':5' == '/pos/' %}active{% endif %}">Kassa (POS)</a>
 
@@ -48,8 +47,10 @@
       </nav>
     
     </aside>
+    {% endif %}
 
     <main class="main">
+      {% if not hide_topbar %}
       <div class="topbar">
         <div class="topbar-left" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <span class="pill">
@@ -57,7 +58,7 @@
             <strong>{% if active_branch %}{{ active_branch.name }}{% else %}Tanlanmagan{% endif %}</strong>
           </span>
 
-          {% if is_admin_like %}
+          {% if is_admin_like and not hide_sidebar %}
             <a class="btn" href="{% url 'select_branch' %}">Filialni tanlash</a>
           {% endif %}
         </div>
@@ -85,6 +86,7 @@
           </form>
         </div>
       </div>
+      {% endif %}
 
       <div class="content">
         {% if messages %}

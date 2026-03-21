@@ -11,6 +11,9 @@ urlpatterns = [
     path("order/<uuid:pk>/pay/", views.pos_order_pay, name="pos_order_pay"),
     path("order/<uuid:pk>/deliver/", views.pos_order_deliver, name="pos_order_deliver"),
     path("order/<uuid:pk>/cancel/", views.pos_order_cancel, name="pos_order_cancel"),
+    path("order/<uuid:pk>/kitchen/", views.pos_order_kitchen_task, name="pos_order_kitchen"),
     path("order/<uuid:pk>/receipt/", views.pos_order_receipt, name="pos_order_receipt"),
+    path("order/<uuid:pk>/receipt-data/", views.pos_order_receipt_data, name="pos_order_receipt_data"),
+    path("order/<uuid:pk>/kitchen-print-data/", views.pos_order_kitchen_print_data, name="pos_order_kitchen_print_data"),
     path("api/menu/", views.pos_menu_json, name="pos_menu_json"),
 ]

@@ -2,32 +2,16 @@ from django.contrib import admin, messages
 from django.db.models import Sum
 from django.utils import timezone
 
+from users.utils import get_profile, get_user_branch_id, is_admin_user, is_cashier_role_value, is_super_recovery_user
+
 from .models import BranchProduct, StockImport, StockImportItem
-from .services import post_stock_import
-
-from users.models import StaffRole
+from .services import post_stock_import, reverse_stock_import
 
 
-def _is_owner(user):
-    if getattr(user, "is_superuser", False):
-        return True
-    prof = getattr(user, "profile", None)
-    return bool(prof and prof.is_active and prof.role == StaffRole.OWNER)
-
-
-def _staff_branch_id(user):
-    prof = getattr(user, "profile", None)
-    if not prof or not prof.is_active:
-        return None
-    return prof.branch_id
-
-
-# ====== ACTIONS (module level) ======
 @admin.action(description="Post qilish (stock + cost hisoblanadi)")
 def post_imports(modeladmin, request, queryset):
     posted = 0
 
-    # select_for_update yaxshi, lekin admin action ichida queryset.update emas, iteratsiya bo'ladi
     for imp in queryset:
         if imp.status == StockImport.Status.POSTED:
             continue
@@ -35,7 +19,6 @@ def post_imports(modeladmin, request, queryset):
         try:
             post_stock_import(imp, by_user=request.user)
 
-            # Agar servis o'zi qo'ymagan bo'lsa ham, shu yerda kafolatlaymiz
             changed = []
             if hasattr(imp, "posted_by_id") and not imp.posted_by_id:
                 imp.posted_by = request.user
@@ -50,7 +33,7 @@ def post_imports(modeladmin, request, queryset):
         except Exception as e:
             modeladmin.message_user(
                 request,
-                f"Import {str(imp.id)[:8]} POST bo‘lmadi: {e}",
+                f"Import {str(imp.id)[:8]} POST bo'lmadi: {e}",
                 level=messages.ERROR,
             )
 
@@ -62,7 +45,6 @@ def post_imports(modeladmin, request, queryset):
         )
 
 
-# ====== BRANCH PRODUCT ======
 @admin.register(BranchProduct)
 class BranchProductAdmin(admin.ModelAdmin):
     list_display = ("branch", "product", "product_count_type", "stock_qty_display", "avg_unit_cost", "last_unit_cost")
@@ -73,11 +55,17 @@ class BranchProductAdmin(admin.ModelAdmin):
     ordering = ("branch__name", "product__name")
     list_per_page = 50
 
+    def has_module_permission(self, request):
+        return is_admin_user(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_admin_user(request.user)
+
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if _is_owner(request.user):
+        if is_admin_user(request.user):
             return qs
-        bid = _staff_branch_id(request.user)
+        bid = get_user_branch_id(request.user)
         if not bid:
             return qs.none()
         return qs.filter(branch_id=bid)
@@ -91,7 +79,6 @@ class BranchProductAdmin(admin.ModelAdmin):
         return obj.stock_qty
 
 
-# ====== IMPORT INLINE ======
 class StockImportItemInline(admin.TabularInline):
     model = StockImportItem
     extra = 1
@@ -111,11 +98,17 @@ class StockImportItemInline(admin.TabularInline):
 
     def has_delete_permission(self, request, obj=None):
         if obj and obj.status == StockImport.Status.POSTED:
-            return False
+            return is_super_recovery_user(request.user)
         return super().has_delete_permission(request, obj)
 
+    def delete_model(self, request, obj):
+        reverse_stock_import(obj, actor=request.user)
 
-# ====== STOCK IMPORT ======
+    def delete_queryset(self, request, queryset):
+        for imp in queryset:
+            reverse_stock_import(imp, actor=request.user)
+
+
 @admin.register(StockImport)
 class StockImportAdmin(admin.ModelAdmin):
     inlines = (StockImportItemInline,)
@@ -126,20 +119,21 @@ class StockImportAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
     save_on_top = False
     list_per_page = 50
-
     actions = (post_imports,)
-
-    # created_by / posted_by / posted_at admin’da o‘zgarmasin
     readonly_fields = ("created_at", "status", "cash_txn", "created_by", "posted_by", "posted_at")
-
-    # Admin formida FK widget “pencil/plus/x/eye” chiqmasin
     raw_id_fields = ("created_by", "posted_by")
+
+    def has_module_permission(self, request):
+        return is_admin_user(request.user)
+
+    def has_view_permission(self, request, obj=None):
+        return is_admin_user(request.user)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if _is_owner(request.user):
+        if is_admin_user(request.user):
             return qs
-        bid = _staff_branch_id(request.user)
+        bid = get_user_branch_id(request.user)
         if not bid:
             return qs.none()
         return qs.filter(branch_id=bid)
@@ -159,10 +153,8 @@ class StockImportAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(super().get_readonly_fields(request, obj))
-        # POSTED bo'lsa asosiy maydonlar ham lock bo'ladi
         if obj and obj.status == StockImport.Status.POSTED:
             ro += ["branch", "note", "paid_from_account"]
-        # created_by/posted_by/posted_at har doim readonly bo'lsin
         for f in ("created_by", "posted_by", "posted_at"):
             if f not in ro:
                 ro.append(f)
@@ -174,13 +166,11 @@ class StockImportAdmin(admin.ModelAdmin):
         return super().has_delete_permission(request, obj)
 
     def save_model(self, request, obj, form, change):
-        # created_by faqat birinchi create’da qo'yiladi
         if not change and obj.created_by_id is None:
             obj.created_by = request.user
 
-        # STAFF bo'lsa branchni majburan o'z profilidan olamiz (admin’da boshqa branch tanlab yubormasin)
-        prof = getattr(request.user, "profile", None)
-        if prof and prof.is_active and prof.role == StaffRole.STAFF:
+        prof = get_profile(request.user)
+        if prof and getattr(prof, "is_active", False) and is_cashier_role_value(getattr(prof, "role", None)):
             obj.branch_id = prof.branch_id
 
         super().save_model(request, obj, form, change)

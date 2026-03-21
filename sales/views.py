@@ -11,38 +11,34 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 
 from core.middleware import get_active_branch
+from core.services import ensure_branch_is_operational
 from finance.models import MoneyAccount
+from finance.utils import parse_uzs_amount
 from menu.models import Food, FoodType
-from users.models import StaffRole
+from users.utils import is_admin_user
 
-from .models import Order, OrderItem
+from .models import Order
 from .services import (
     OrderValidationError,
+    build_receipt_context,
     cancel_order,
+    create_order_with_items,
+    ensure_kitchen_task,
     mark_delivered,
     pay_order,
-    recalc_order_totals,
-    create_order_with_items,
-    build_receipt_context,
 )
-from finance.utils import parse_uzs_amount
 
 
 def _is_admin_like(user) -> bool:
-    if user.is_superuser:
-        return True
-    prof = getattr(user, "profile", None) or getattr(user, "staffprofile", None)
-    role = getattr(prof, "role", None) if prof else None
-    return role == StaffRole.OWNER
+    return is_admin_user(user)
 
 
 def _require_branch(request):
     """POS ishlashi uchun faol filial kerak."""
     branch = get_active_branch(request)
     if branch:
-        return branch
+        return ensure_branch_is_operational(branch)
     if _is_admin_like(request.user):
-        # owner -> filial tanlashga yuboramiz
         raise LookupError("branch_not_selected")
     raise PermissionError("Faol filial tanlanmagan")
 
@@ -64,7 +60,6 @@ def _branch_accounts(branch, *, ensure_default: bool = False):
 
 @login_required
 def pos_orders(request):
-    """Operator uchun: filial orderlari ro'yxati."""
     try:
         branch = _require_branch(request)
     except LookupError:
@@ -73,7 +68,7 @@ def pos_orders(request):
         return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
 
     status = (request.GET.get("status") or "").strip()
-    delivered = (request.GET.get("delivered") or "").strip()  # '1' / '0'
+    delivered = (request.GET.get("delivered") or "").strip()
 
     qs = (
         Order.objects.filter(branch=branch)
@@ -105,7 +100,6 @@ def pos_orders(request):
 @login_required
 @require_http_methods(["GET", "POST"])
 def pos_order_create(request):
-    """Yangi order yaratish (menu + chek)."""
     try:
         branch = _require_branch(request)
     except LookupError:
@@ -119,7 +113,6 @@ def pos_order_create(request):
         .order_by("type", "category__sort_order", "sort_order", "name")
     )
 
-    # JS uchun minimal JSON
     foods_json: list[dict[str, Any]] = []
     for f in foods_qs:
         img = None
@@ -156,10 +149,8 @@ def pos_order_create(request):
 
         is_paid = (request.POST.get("is_paid") or "") == "1"
         is_delivered = (request.POST.get("is_delivered") or "") == "1"
-
         account_id = (request.POST.get("account_id") or "").strip()
         paid_amount_raw = (request.POST.get("paid_amount") or "").strip()
-
         note = (request.POST.get("note") or "").strip() or None
 
         try:
@@ -174,11 +165,9 @@ def pos_order_create(request):
 
                 order.refresh_from_db()
 
-                # topshirildi -> stock yechish
                 if is_delivered:
                     mark_delivered(order, by_user=request.user)
 
-                # to'lov
                 if is_paid:
                     if not account_id:
                         acc = single_account
@@ -217,6 +206,9 @@ def pos_order_create(request):
             "single_account": single_account,
             "has_payment_accounts": bool(accounts),
             "OrderType": Order.OrderType,
+            "hide_sidebar": True,
+            "hide_topbar": True,
+            "body_class": "no-sidebar pos-no-nav",
         },
     )
 
@@ -240,7 +232,6 @@ def pos_order_detail(request, pk):
 
     accounts = list(_branch_accounts(branch))
     single_account = accounts[0] if len(accounts) == 1 else None
-
     due = max(0, int(order.total_amount) - int(order.paid_amount))
 
     return render(
@@ -359,7 +350,6 @@ def pos_order_cancel(request, pk):
 
 @login_required
 def pos_menu_json(request):
-    """(Ixtiyoriy) Menu JSON — front uchun."""
     try:
         branch = _require_branch(request)
     except LookupError:
@@ -392,12 +382,125 @@ def pos_order_receipt(request, pk):
         return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
 
     order = get_object_or_404(Order, pk=pk, branch=branch)
-    paper_width = request.GET.get("paper", "80")
-    ctx = build_receipt_context(order, paper_width=paper_width)
+    # paper_width = request.GET.get("paper", "80")
+    ctx = build_receipt_context(order)
     ctx.update({"branch": branch})
     return render(request, "sales/receipt.html", ctx)
 
 
-"""Note: order finalize alohida view kerak emas.
-Order avtomatik yakunlanadi: (1) topshirildi + (2) to'lov to'liq bo'lsa -> is_locked=True.
-"""
+@login_required
+def pos_order_kitchen_task(request, pk):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    order = get_object_or_404(Order.objects.select_related("branch"), pk=pk, branch=branch)
+    task = ensure_kitchen_task(order, actor=request.user)
+
+    if request.method == "POST":
+        new_status = request.POST.get("status")
+        if new_status in {c for c, _ in task.Status.choices}:
+            task.status = new_status
+            task.updated_by = request.user
+            task.save(update_fields=["status", "updated_by", "updated_at"])
+        return redirect("sales:pos_order_kitchen", pk=pk)
+
+    return render(
+        request,
+        "sales/kitchen_task.html",
+        {
+            "branch": branch,
+            "order": order,
+            "task": task,
+            "items": order.items.select_related("food"),
+            "hide_sidebar": True,
+            "hide_topbar": True,
+            "body_class": "no-sidebar pos-no-nav",
+        },
+    )
+
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect
+from django.http import HttpResponseForbidden
+
+from sales.models import Order
+from sales.services import build_receipt_context
+
+@login_required
+def pos_order_receipt_data(request, pk):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    order = get_object_or_404(Order, pk=pk, branch=branch)
+    ctx = build_receipt_context(order)
+
+    return JsonResponse({
+        "ok": True,
+        "doc_type": "receipt",
+        "branch": {
+            "name": ctx["branch"].name,
+            "address": getattr(ctx["branch"], "public_address", "") or "",
+            "phone": getattr(ctx["branch"], "public_phone", "") or "",
+        },
+        "order": {
+            "id": str(ctx["order"].id)[:8],
+            "created_at": ctx["order"].created_at.strftime("%d.%m.%Y %H:%M"),
+            "cashier": ctx["order"].created_by.username if ctx["order"].created_by else "-",
+            "type": ctx["order"].get_order_type_display(),
+            "total_amount": ctx["total_amount"],
+            "paid_amount": ctx["paid_amount"],
+            "due": ctx["due"],
+            "is_delivered": bool(ctx["order"].is_delivered),
+            "is_fully_paid": bool(ctx["order"].is_fully_paid),
+        },
+        "items": ctx["items"],
+        "payments": [
+            {
+                "amount": p["amount"],
+                "account": p["account"],
+                "created_at": p["created_at"].strftime("%d.%m %H:%M"),
+            }
+            for p in ctx["payments"]
+        ],
+    })
+
+@login_required
+def pos_order_kitchen_print_data(request, pk):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    order = get_object_or_404(Order.objects.select_related("branch"), pk=pk, branch=branch)
+    task = ensure_kitchen_task(order, actor=request.user)
+
+    return JsonResponse({
+        "ok": True,
+        "doc_type": "kitchen",
+        "branch": {
+            "name": branch.name,
+        },
+        "order": {
+            "id": str(order.id)[:8],
+            "created_at": order.created_at.strftime("%d.%m.%Y %H:%M"),
+            "type": order.get_order_type_display(),
+        },
+        "items": [
+            {
+                "name": it.food.name,
+                "qty": it.qty,
+            }
+            for it in order.items.select_related("food").all()
+        ],
+        "note": task.note or order.note or "",
+    })
