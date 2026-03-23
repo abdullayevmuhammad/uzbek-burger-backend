@@ -91,6 +91,22 @@ class Order(models.Model):
     def is_fully_paid(self):
         return self.paid_amount >= self.total_amount
 
+    @property
+    def due_amount(self):
+        return max(0, int(self.total_amount or 0) - int(self.paid_amount or 0))
+
+    @property
+    def needs_payment(self):
+        return self.status != self.Status.CANCELED and self.due_amount > 0
+
+    @property
+    def needs_delivery(self):
+        return self.status != self.Status.CANCELED and self.total_amount > 0 and not self.is_delivered
+
+    @property
+    def requires_attention(self):
+        return not self.is_locked and (self.needs_delivery or self.needs_payment)
+
     def __str__(self):
         return f"{self.branch.name} | {str(self.id)[:8]} | {self.status}"
 

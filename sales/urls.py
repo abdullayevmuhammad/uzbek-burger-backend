@@ -6,7 +6,9 @@ app_name = "sales"
 
 urlpatterns = [
     path("", views.pos_orders, name="pos_orders"),
+    path("analytics/", views.pos_analytics, name="pos_analytics"),
     path("order/new/", views.pos_order_create, name="pos_order_create"),
+    path("api/pending-tasks/", views.pos_pending_tasks_feed, name="pos_pending_tasks_feed"),
     path("order/<uuid:pk>/", views.pos_order_detail, name="pos_order_detail"),
     path("order/<uuid:pk>/pay/", views.pos_order_pay, name="pos_order_pay"),
     path("order/<uuid:pk>/deliver/", views.pos_order_deliver, name="pos_order_deliver"),

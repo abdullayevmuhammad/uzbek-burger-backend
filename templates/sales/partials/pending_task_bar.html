@@ -1,0 +1,95 @@
+{% load money %}
+<section class="pos-task-bar">
+  <div class="pos-task-bar-head">
+    <div>
+      <div class="pos-card-title" style="margin-bottom:4px;">Jonli vazifalar</div>
+      <div class="muted small">To'lovi yoki topshirilishi kutilayotgan buyurtmalar shu yerda ko'rinadi.</div>
+    </div>
+    <div class="pill">{{ pending_task_count }} ta faol vazifa</div>
+  </div>
+
+  {% if pending_orders %}
+    <div class="pos-task-grid">
+      {% for order in pending_orders %}
+        {% with short_id=order.id|stringformat:"s"|slice:":8" %}
+        <article class="pos-task-card" data-order-task="{{ order.id }}">
+          <div class="pos-task-card-head">
+            <div>
+              <div class="pos-task-order-id">#{{ short_id }}</div>
+              <div class="muted small">{{ order.created_at|date:"d.m.Y H:i" }} | {{ order.get_order_type_display }}</div>
+            </div>
+            <div class="pos-task-priority">
+              {% if order.needs_delivery and order.needs_payment %}
+                <span class="chip chip-danger">To'lov + topshirish kutilmoqda</span>
+              {% elif order.needs_delivery %}
+                <span class="chip chip-warn">Topshirish kutilmoqda</span>
+              {% else %}
+                <span class="chip chip-warn">To'lov kutilmoqda</span>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if order.note %}
+            <div class="pos-task-note">{{ order.note }}</div>
+          {% endif %}
+
+          <div class="pos-task-items">
+            {% for item in order.items.all %}
+              <div class="pos-task-item">
+                <span>{{ item.food.name }}</span>
+                <strong>{{ item.qty }} ta</strong>
+              </div>
+            {% endfor %}
+          </div>
+
+          <div class="pos-task-meta">
+            <span>Jami: <strong>{{ order.total_amount|som }}</strong></span>
+            {% if order.needs_payment %}
+              <span>Qoldiq: <strong>{{ order.due_amount|som }}</strong></span>
+            {% endif %}
+            {% if order.kitchen_task %}
+              <span>Oshxona: <strong>{{ order.kitchen_task.get_status_display }}</strong></span>
+            {% endif %}
+          </div>
+
+          <div class="pos-task-actions">
+            {% if order.needs_delivery %}
+              <button
+                class="pos-inline-action"
+                type="button"
+                data-order-action="deliver"
+                data-order-id="{{ order.id }}"
+                data-order-short="{{ short_id }}"
+                data-url="{% url 'sales:pos_order_deliver' order.pk %}"
+              >
+                Topshirildi
+              </button>
+            {% endif %}
+
+            {% if order.needs_payment %}
+              <button
+                class="pos-inline-action pos-inline-action-primary"
+                type="button"
+                data-order-action="pay"
+                data-order-id="{{ order.id }}"
+                data-order-short="{{ short_id }}"
+                data-order-due="{{ order.due_amount }}"
+                data-url="{% url 'sales:pos_order_pay' order.pk %}"
+              >
+                {% if order.paid_amount > 0 %}Qoldiqni yopish{% else %}To'lovni yopish{% endif %}
+              </button>
+            {% endif %}
+
+            <a class="btn btn-ghost" href="{% url 'sales:pos_order_detail' order.pk %}">Ochish</a>
+          </div>
+        </article>
+        {% endwith %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="pos-task-empty">
+      <div class="pos-task-empty-title">Faol ogohlantirishlar yo'q</div>
+      <div class="muted">Barcha ko'rinib turgan buyurtmalar topshirilgan va to'lovlari yopilgan.</div>
+    </div>
+  {% endif %}
+</section>

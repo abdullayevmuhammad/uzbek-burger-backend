@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from core.services import ensure_branch_is_operational
@@ -490,3 +490,30 @@ def ensure_kitchen_task(order: Order, *, actor=None) -> KitchenTask:
     task.updated_by = actor
     task.save(update_fields=["items_snapshot", "updated_by", "updated_at"])
     return task
+
+
+def get_pending_action_queryset(branch):
+    return (
+        Order.objects.filter(branch=branch, total_amount__gt=0, is_locked=False)
+        .exclude(status=Order.Status.CANCELED)
+        .filter(Q(is_delivered=False) | Q(paid_amount__lt=F("total_amount")))
+        .select_related("created_by", "paid_by", "delivered_by", "kitchen_task")
+        .prefetch_related("items__food")
+        .order_by("created_at")
+    )
+
+
+def count_pending_action_orders(branch) -> int:
+    return (
+        Order.objects.filter(branch=branch, total_amount__gt=0, is_locked=False)
+        .exclude(status=Order.Status.CANCELED)
+        .filter(Q(is_delivered=False) | Q(paid_amount__lt=F("total_amount")))
+        .count()
+    )
+
+
+def get_pending_action_orders(branch, *, limit: int | None = None):
+    queryset = get_pending_action_queryset(branch)
+    if limit is not None:
+        queryset = queryset[:limit]
+    return list(queryset)

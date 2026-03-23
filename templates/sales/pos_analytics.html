@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block title %}POS Hisobotlar{% endblock %}
+
+{% block content %}
+<div class="pos-page-head">
+  <div>
+    <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
+    <h1 class="pos-h1">Analitika va hisobotlar</h1>
+    <div class="muted" style="margin-top:6px;">Grafiklarsiz, aniq raqamlar bilan kunlik va davriy hisobotlar.</div>
+  </div>
+
+  <div class="pos-head-actions">
+    <a class="btn" href="{% url 'sales:pos_orders' %}">Buyurtmalar</a>
+    <a class="btn btn-primary" href="{% url 'sales:pos_order_create' %}">Yangi buyurtma</a>
+  </div>
+</div>
+
+<form class="analytics-filters" method="get">
+  <div class="analytics-range-pills">
+    <button class="analytics-range-pill {% if range_key == 'day' %}is-active{% endif %}" type="submit" name="range" value="day">Kun</button>
+    <button class="analytics-range-pill {% if range_key == 'week' %}is-active{% endif %}" type="submit" name="range" value="week">Hafta</button>
+    <button class="analytics-range-pill {% if range_key == 'month' %}is-active{% endif %}" type="submit" name="range" value="month">Oy</button>
+    <button class="analytics-range-pill {% if range_key == 'year' %}is-active{% endif %}" type="submit" name="range" value="year">Yil</button>
+  </div>
+
+  <div class="analytics-filter-grid">
+    <div class="pos-field">
+      <label>Oraliq</label>
+      <input class="control" type="hidden" name="range" value="custom">
+      <input class="control" type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="pos-field">
+      <label>Tugash sanasi</label>
+      <input class="control" type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="analytics-filter-actions">
+      <button class="btn btn-primary" type="submit">Qo'llash</button>
+      <a class="btn btn-ghost" href="{% url 'sales:pos_analytics' %}">Tozalash</a>
+    </div>
+  </div>
+</form>
+
+{% if not analytics.has_activity %}
+  <div class="notice notice-info" style="margin-bottom:16px;">
+    Tanlangan davr uchun hali sotuv yoki xarajat topilmadi. Pastdagi ombor va vazifa signallari esa joriy holatni ko'rsatishda davom etadi.
+  </div>
+{% endif %}
+
+<section class="analytics-kpi-grid">
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Tushum</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.revenue_total|som }}</strong>
+    <span class="muted">Qabul qilingan to'lovlar yig'indisi</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Xarajatlar</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.expenses_total|som }}</strong>
+    <span class="muted">Expense tranzaksiyalari bo'yicha</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Brutto foyda</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.gross_profit_total|som }}</strong>
+    <span class="muted">{{ analytics.notes.gross_profit }}</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Kassa oqimi</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.cashflow_total|som }}</strong>
+    <span class="muted">{{ analytics.notes.cashflow }}</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Buyurtmalar</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.order_count }}</strong>
+    <span class="muted">{{ analytics.kpis.delivered_order_count }} tasi topshirilgan</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">O'rtacha chek</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.average_ticket|som }}</strong>
+    <span class="muted">{{ analytics.kpis.paid_order_count }} ta to'langan buyurtma asosida</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Ochiq qoldiq</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.outstanding_balance_total|som }}</strong>
+    <span class="muted">Yopilmagan buyurtmalar bo'yicha</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Faol vazifalar</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.pending_action_count }}</strong>
+    <span class="muted">To'lov yoki topshirish kutilmoqda</span>
+  </article>
+  <article class="analytics-kpi-card">
+    <span class="analytics-kpi-label">Low stock</span>
+    <strong class="analytics-kpi-value">{{ analytics.kpis.low_stock_count }}</strong>
+    <span class="muted">Xomashyo signallari</span>
+  </article>
+</section>
+
+<section class="analytics-grid">
+  <article class="analytics-card analytics-card-wide">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Davr bo'yicha aniq hisobot</h2>
+        <p class="muted">{{ date_from }} dan {{ date_to }} gacha bo'lgan tushum, xarajat, foyda va buyurtmalar soni.</p>
+      </div>
+    </div>
+    <div class="analytics-table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Sana</th>
+            <th>Tushum</th>
+            <th>Xarajat</th>
+            <th>Brutto foyda</th>
+            <th>Buyurtmalar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analytics.period_rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{{ row.revenue|som }}</td>
+              <td>{{ row.expenses|som }}</td>
+              <td>{{ row.profit|som }}</td>
+              <td>{{ row.orders }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="muted">Ma'lumot topilmadi.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Top mahsulotlar</h2>
+        <p class="muted">Miqdor bo'yicha eng ko'p sotilganlar</p>
+      </div>
+    </div>
+    <div class="analytics-table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Mahsulot</th>
+            <th>Miqdor</th>
+            <th>Tushum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analytics.top_products_qty %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.revenue|som }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="muted">Ma'lumot yo'q.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Top revenue mahsulotlari</h2>
+        <p class="muted">Tushum bo'yicha yetakchilar</p>
+      </div>
+    </div>
+    <div class="analytics-table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Mahsulot</th>
+            <th>Miqdor</th>
+            <th>Tushum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analytics.top_products_revenue %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.revenue|som }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="muted">Ma'lumot yo'q.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Kategoriya bo'yicha sotuv</h2>
+        <p class="muted">Tushum va hajm kesimida</p>
+      </div>
+    </div>
+    <div class="analytics-table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Kategoriya</th>
+            <th>Miqdor</th>
+            <th>Tushum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analytics.category_sales %}
+            <tr>
+              <td>{{ row.name }}</td>
+              <td>{{ row.quantity }}</td>
+              <td>{{ row.revenue|som }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="muted">Ma'lumot yo'q.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Kam qolayotgan xomashyolar</h2>
+        <p class="muted">Threshold: dona=10, kg/l=2, gr/ml=1000</p>
+      </div>
+    </div>
+    <ul class="analytics-list analytics-list-alerts">
+      {% for item in analytics.low_stock_alerts %}
+        <li>
+          <span>{{ item.product_name }}</span>
+          <strong>{{ item.stock_qty }} {{ item.unit }} / min {{ item.threshold }}</strong>
+        </li>
+      {% empty %}
+        <li class="muted">Jiddiy low-stock signal topilmadi.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Fastfood</h2>
+        <p class="muted">Miqdor bo'yicha</p>
+      </div>
+    </div>
+    <ul class="analytics-list">
+      {% for row in analytics.best_fastfood %}
+        <li><span>{{ row.name }}</span><strong>{{ row.quantity }} ta | {{ row.revenue|som }}</strong></li>
+      {% empty %}
+        <li class="muted">Ma'lumot yo'q.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Ichimliklar</h2>
+        <p class="muted">Miqdor bo'yicha</p>
+      </div>
+    </div>
+    <ul class="analytics-list">
+      {% for row in analytics.best_drinks %}
+        <li><span>{{ row.name }}</span><strong>{{ row.quantity }} ta | {{ row.revenue|som }}</strong></li>
+      {% empty %}
+        <li class="muted">Ma'lumot yo'q.</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="analytics-card">
+    <div class="analytics-card-head">
+      <div>
+        <h2 class="analytics-card-title">Setlar</h2>
+        <p class="muted">Miqdor bo'yicha</p>
+      </div>
+    </div>
+    <ul class="analytics-list">
+      {% for row in analytics.best_sets %}
+        <li><span>{{ row.name }}</span><strong>{{ row.quantity }} ta | {{ row.revenue|som }}</strong></li>
+      {% empty %}
+        <li class="muted">Ma'lumot yo'q.</li>
+      {% endfor %}
+    </ul>
+  </article>
+</section>
+{% endblock %}

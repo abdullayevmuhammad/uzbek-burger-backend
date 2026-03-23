@@ -1,0 +1,60 @@
+{% load money %}
+<div class="pos-status-chips" id="order-status-{{ o.id }}">
+  {% if o.is_delivered %}
+    <span class="chip chip-ok">Topshirildi</span>
+  {% else %}
+    <span class="pos-hover-chip">
+      <span class="chip chip-warn">Jo'natilmagan</span>
+      <span class="pos-chip-hover-actions">
+        <button
+          class="pos-inline-action"
+          type="button"
+          data-order-action="deliver"
+          data-order-id="{{ o.id }}"
+          data-order-short="{{ o.id|stringformat:'s'|slice:':8' }}"
+          data-url="{% url 'sales:pos_order_deliver' o.pk %}"
+        >
+          Topshirildi deb belgilash
+        </button>
+      </span>
+    </span>
+  {% endif %}
+
+  {% if o.is_fully_paid %}
+    <span class="chip chip-ok">To'liq to'langan</span>
+  {% elif o.paid_amount > 0 %}
+    <span class="pos-hover-chip">
+      <span class="chip chip-warn">Qisman | {{ due|som }} qoldiq</span>
+      <span class="pos-chip-hover-actions">
+        <button
+          class="pos-inline-action pos-inline-action-primary"
+          type="button"
+          data-order-action="pay"
+          data-order-id="{{ o.id }}"
+          data-order-short="{{ o.id|stringformat:'s'|slice:':8' }}"
+          data-order-due="{{ due }}"
+          data-url="{% url 'sales:pos_order_pay' o.pk %}"
+        >
+          Qoldiqni yopish
+        </button>
+      </span>
+    </span>
+  {% else %}
+    <span class="pos-hover-chip">
+      <span class="chip chip-danger">To'lanmagan</span>
+      <span class="pos-chip-hover-actions">
+        <button
+          class="pos-inline-action pos-inline-action-primary"
+          type="button"
+          data-order-action="pay"
+          data-order-id="{{ o.id }}"
+          data-order-short="{{ o.id|stringformat:'s'|slice:':8' }}"
+          data-order-due="{{ due }}"
+          data-url="{% url 'sales:pos_order_pay' o.pk %}"
+        >
+          To'lovni yopish
+        </button>
+      </span>
+    </span>
+  {% endif %}
+</div>

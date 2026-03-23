@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 {% load money %}
 
 {% block title %}Kassa (POS){% endblock %}
@@ -8,20 +9,37 @@
   <div>
     <div class="pos-kicker">Filial: <b>{{ branch.name }}</b></div>
     <h1 class="pos-h1">Buyurtmalar</h1>
+    <div class="muted" style="margin-top:6px;">Davr, holat va to'lov kesimida operatsion hisobot bilan ishlang.</div>
   </div>
 
   <div class="pos-head-actions">
+    <a class="btn" href="{% url 'sales:pos_analytics' %}">Hisobotlar</a>
     <a class="btn btn-primary" href="{% url 'sales:pos_order_create' %}">+ Yangi buyurtma</a>
   </div>
 </div>
 
-<form class="pos-filters" method="get">
+<form class="pos-filters pos-filters-extended" method="get">
+  <input type="hidden" name="period" id="posPeriodInput" value="{{ period_key }}">
+
+  <div class="pos-filter pos-filter-wide">
+    <label>Davr</label>
+    <div class="analytics-range-pills pos-range-pills">
+      <button class="analytics-range-pill {% if period_key == 'day' %}is-active{% endif %}" type="button" data-period-value="day">Kun</button>
+      <button class="analytics-range-pill {% if period_key == 'week' %}is-active{% endif %}" type="button" data-period-value="week">Hafta</button>
+      <button class="analytics-range-pill {% if period_key == 'month' %}is-active{% endif %}" type="button" data-period-value="month">Oy</button>
+      <button class="analytics-range-pill {% if period_key == 'year' %}is-active{% endif %}" type="button" data-period-value="year">Yil</button>
+    </div>
+    <div class="muted small" style="margin-top:8px;">
+      {{ period_date_from|date:"d.m.Y" }} - {{ period_date_to|date:"d.m.Y" }}
+    </div>
+  </div>
+
   <div class="pos-filter">
     <label>Status</label>
     <select class="control" name="status">
       <option value="">Barchasi</option>
       <option value="{{ Status.DRAFT }}" {% if status == Status.DRAFT %}selected{% endif %}>Yangi</option>
-      <option value="{{ Status.PAID }}" {% if status == Status.PAID %}selected{% endif %}>To‘langan</option>
+      <option value="{{ Status.PAID }}" {% if status == Status.PAID %}selected{% endif %}>To'langan</option>
       <option value="{{ Status.CANCELED }}" {% if status == Status.CANCELED %}selected{% endif %}>Bekor qilingan</option>
     </select>
   </div>
@@ -31,60 +49,140 @@
     <select class="control" name="delivered">
       <option value="">Barchasi</option>
       <option value="1" {% if delivered == "1" %}selected{% endif %}>Ha</option>
-      <option value="0" {% if delivered == "0" %}selected{% endif %}>Yo‘q</option>
+      <option value="0" {% if delivered == "0" %}selected{% endif %}>Yo'q</option>
+    </select>
+  </div>
+
+  <div class="pos-filter">
+    <label>To'lov holati</label>
+    <select class="control" name="payment">
+      <option value="">Barchasi</option>
+      <option value="paid" {% if payment == "paid" %}selected{% endif %}>To'liq to'langan</option>
+      <option value="partial" {% if payment == "partial" %}selected{% endif %}>Qisman</option>
+      <option value="unpaid" {% if payment == "unpaid" %}selected{% endif %}>To'lanmagan</option>
+    </select>
+  </div>
+
+  <div class="pos-filter">
+    <label>Sahifa hajmi</label>
+    <select class="control" name="page_size">
+      {% for option in page_size_choices %}
+        <option value="{{ option }}" {% if page_size == option|stringformat:"s" %}selected{% endif %}>{{ option }} ta</option>
+      {% endfor %}
+      <option value="all" {% if page_size == "all" %}selected{% endif %}>Hammasi</option>
     </select>
   </div>
 
   <div class="pos-filter-btns">
-    <button class="btn" type="submit">Filtrlash</button>
-    <a class="btn btn-ghost" href="{% url 'sales:pos_orders' %}">Tozalash</a>
+    <button class="btn" type="submit">Qo'llash</button>
+    <a class="btn btn-ghost" href="{{ clear_filters_url }}">Tozalash</a>
   </div>
 </form>
 
+<section class="pos-summary-grid">
+  <article class="pos-summary-card">
+    <span class="pos-summary-label">Filtrlangan jami summa</span>
+    <strong class="pos-summary-value">{{ order_summary.total_amount|som }}</strong>
+    <span class="muted">{{ order_summary.count }} ta buyurtma bo'yicha</span>
+  </article>
+  <article class="pos-summary-card">
+    <span class="pos-summary-label">Qabul qilingan to'lov</span>
+    <strong class="pos-summary-value">{{ order_summary.paid_amount|som }}</strong>
+    <span class="muted">Joriy filtr natijasi</span>
+  </article>
+  <article class="pos-summary-card">
+    <span class="pos-summary-label">Ochiq qoldiq</span>
+    <strong class="pos-summary-value">{{ order_summary.outstanding_amount|som }}</strong>
+    <span class="muted">Yopilmagan buyurtmalar bo'yicha</span>
+  </article>
+</section>
+
 <div class="pos-table-wrap">
-  <table class="table">
-    <thead>
-      <tr>
-        <th>ID / Vaqt</th>
-        <th>Turi</th>
-        <th>Holat</th>
-        <th>Jami</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for o in orders %}
+  <div class="pos-table-scroll">
+    <table class="table" id="posOrdersTable">
+      <thead>
         <tr>
-          <td>
-            <div class="mono">{{ o.id|stringformat:"s"|slice:":8" }}</div>
-            <div class="muted">{{ o.created_at|date:"d.m.Y H:i" }}</div>
-          </td>
-          <td>{{ o.get_order_type_display }}</td>
-          <td>
-            {% if o.is_delivered %}
-              <span class="chip chip-ok">Topshirildi</span>
-            {% else %}
-              <span class="chip chip-warn">Jo'natilmagan</span>
-            {% endif %}
-            {% if o.is_fully_paid %}
-              <span class="chip chip-ok">To‘liq to‘langan</span>
-            {% elif o.paid_amount > 0 %}
-              <span class="chip chip-warn">Qisman</span>
-            {% else %}
-              <span class="chip chip-danger">To‘lanmagan</span>
-            {% endif %}
-          </td>
-          <td><b>{{ o.total_amount|som }}</b></td>
-          <td style="text-align:right;">
-            <a class="btn btn-sm" href="{% url 'sales:pos_order_detail' o.pk  %}">Ochish</a>
-          </td>
+          <th>ID / Vaqt</th>
+          <th>Turi</th>
+          <th>Holat</th>
+          <th>Jami</th>
+          <th></th>
         </tr>
-      {% empty %}
-        <tr>
-          <td colspan="7" class="muted" style="padding:18px;">Hozircha buyurtmalar yo‘q.</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+          <tr data-order-row="{{ o.id }}">
+            <td>
+              <div class="mono">{{ o.id|stringformat:"s"|slice:":8" }}</div>
+              <div class="muted">{{ o.created_at|date:"d.m.Y H:i" }}</div>
+            </td>
+            <td>{{ o.get_order_type_display }}</td>
+            <td>{% include "sales/partials/order_status_badges.html" with o=o due=o.due_amount %}</td>
+            <td><b>{{ o.total_amount|som }}</b></td>
+            <td style="text-align:right;">
+              <a class="btn btn-sm" href="{% url 'sales:pos_order_detail' o.pk %}">Ochish</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="muted" style="padding:18px;">Tanlangan filtrlar bo'yicha buyurtma topilmadi.</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<section class="pos-pagination-bar">
+  <div class="muted">
+    {% if page_obj %}
+      {{ page_obj.start_index }}-{{ page_obj.end_index }} / {{ order_summary.count }} ta ko'rsatilmoqda
+    {% else %}
+      {{ order_summary.count }} ta buyurtmaning hammasi ko'rsatilmoqda
+    {% endif %}
+  </div>
+
+  {% if is_paginated %}
+    <nav class="pos-pagination" aria-label="Buyurtmalar sahifalash">
+      {% if page_obj.has_previous %}
+        <a class="pos-pagination-link" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_obj.previous_page_number }}">Oldingi</a>
+      {% endif %}
+
+      {% for page_number in page_numbers %}
+        {% if page_number == page_obj.number %}
+          <span class="pos-pagination-link is-active">{{ page_number }}</span>
+        {% elif page_number == '...' %}
+          <span class="pos-pagination-link is-gap">{{ page_number }}</span>
+        {% else %}
+          <a class="pos-pagination-link" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_number }}">{{ page_number }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if page_obj.has_next %}
+        <a class="pos-pagination-link" href="?{% if pagination_query %}{{ pagination_query }}&{% endif %}page={{ page_obj.next_page_number }}">Keyingi</a>
+      {% endif %}
+    </nav>
+  {% elif page_size != "all" and order_summary.count > 0 %}
+    <div class="muted">Barcha natijalar bitta sahifaga sig'di.</div>
+  {% endif %}
+</section>
+
+<script src="{% static 'js/pos_quick_actions.js' %}"></script>
+<script>
+  document.querySelectorAll("[data-period-value]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const periodInput = document.getElementById("posPeriodInput");
+      if (periodInput) {
+        periodInput.value = button.dataset.periodValue || "month";
+      }
+      button.form && button.form.requestSubmit();
+    });
+  });
+
+  if (window.initPosQuickActions) {
+    window.initPosQuickActions({
+      accounts: {{ quick_action_accounts_json|safe }}
+    });
+  }
+</script>
 {% endblock %}

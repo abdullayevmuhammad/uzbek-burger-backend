@@ -44,7 +44,7 @@
 </section>
 
 <!-- Menu preview -->
-<section class="menu-preview">
+<section class="menu-preview menu-preview-home">
   <div class="container">
     <div class="section-header">
       <h2 class="section-title">Menudan tavsiya</h2>
@@ -52,24 +52,7 @@
     </div>
 
     {% if foods %}
-      <div class="menu-grid">
-        {% for food in foods %}
-          <div class="menu-card">
-            {% if food.image %}
-              <img class="menu-img" src="{{ food.image.url }}" alt="{{ food.name }}">
-            {% else %}
-              <img class="menu-img" src="{% static 'landing/img/placeholder-food.svg' %}" alt="{{ food.name }}">
-            {% endif %}
-            <div class="menu-content">
-              <h3 class="menu-title">{{ food.name }}</h3>
-              <p class="menu-desc">
-                {% if food.category %}{{ food.category.name }}{% else %}{{ food.get_type_display }}{% endif %}
-              </p>
-              <div class="menu-price">{{ food.sell_price|som }}</div>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
+      {% include "landing/partials/public_food_grid.html" with foods=foods show_branch=False %}
       <div style="text-align:center; margin-top: 1.5rem;">
         <a class="btn btn-outline" href="{% url 'landing:menu' %}">Barcha menuni ko'rish</a>
       </div>
@@ -134,7 +117,7 @@
               </div>
               <h3 class="menu-title">{{ post.title }}</h3>
               <p class="menu-desc">{{ post.excerpt|default:post.content|striptags|truncatechars:120 }}</p>
-              <a href="{% url 'landing:post_detail' post.slug %}" style="color: var(--accent-color); font-weight: 500;">Batafsil →</a>
+              <a href="{% url 'landing:post_detail' post.slug %}" style="color: var(--accent-color); font-weight: 500;">Batafsil</a>
             </div>
           </div>
         {% endfor %}

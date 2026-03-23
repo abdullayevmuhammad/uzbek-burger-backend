@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("biz-haqimizda/", views.about, name="about"),
     path("menu/", views.menu, name="menu"),
+    path("menu/live/", views.menu_live, name="menu_live"),
     path("filiallar/", views.branches, name="branches"),
     path("postlar/", views.posts_list, name="posts"),
     path("postlar/<slug:slug>/", views.post_detail, name="post_detail"),

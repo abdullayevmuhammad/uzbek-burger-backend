@@ -3,11 +3,11 @@
 <html lang="uz">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=58mm, initial-scale=1">
-  <title>Chek {{ order.id|stringformat:"s"|slice:":8" }}</title>
+  <meta name="viewport" content="width={{ paper_width }}mm, initial-scale=1">
+  <title>Chek {{ order.id|stringformat:"s"|slice:":8" }} - {{ paper_width }}mm</title>
   <style>
     @page {
-      size: 58mm auto;
+      size: {{ paper_width }}mm auto;
       margin: 0;
     }
 
@@ -21,7 +21,7 @@
     body {
       margin: 0;
       padding: 0;
-      width: 58mm;
+      width: {{ paper_width }}mm;
       background: #ffffff;
       color: #000000;
       font-family: Arial, "Segoe UI", sans-serif;
@@ -253,7 +253,7 @@
     @media print {
       html,
       body {
-        width: 58mm;
+        width: {{ paper_width }}mm;
       }
 
       body {

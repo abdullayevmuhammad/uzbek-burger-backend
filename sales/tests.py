@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -7,11 +8,12 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, SimpleTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from catalog.models import CountType, Product
 from core.models import Branch
 from finance.admin import CashTransactionAdmin
-from finance.models import CashTransaction, MoneyAccount
+from finance.models import CashTransaction, Direction, MoneyAccount, TxnType
 from inventory.models import BranchProduct
 from menu.models import Food, FoodCategory, FoodItem, FoodType
 from sales.admin import OrderAdmin
@@ -379,6 +381,25 @@ class SalesFlowTests(TestCase):
         self.assertContains(response, 'select class="control" name="account_id"', html=False)
         self.assertContains(response, "Tanlang...")
 
+    def test_create_order_view_requires_account_selection_when_multiple_accounts_exist(self):
+        MoneyAccount.objects.create(branch=self.branch_a, name="Card A")
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.post(
+            reverse("sales:pos_order_create"),
+            {
+                "items_json": '[{"food": "%s", "qty": 1}]' % self.food_a.id,
+                "order_type": Order.OrderType.DINE_IN,
+                "is_paid": "1",
+                "paid_amount": "10000",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "hisobini tanlang")
+        self.assertEqual(Order.objects.count(), 0)
+
     def test_create_order_view_warns_and_blocks_payment_when_no_accounts_exist(self):
         self.account_a.delete()
         self._activate_branch(self.staff_a, self.branch_a)
@@ -469,6 +490,202 @@ class SalesFlowTests(TestCase):
         self.assertContains(post_response, "Faol to'lov hisobi topilmadi")
         order.refresh_from_db()
         self.assertEqual(order.paid_amount, 0)
+
+    def test_pending_tasks_feed_lists_actionable_orders(self):
+        actionable = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note="tezroq",
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        resolved = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        mark_delivered(resolved, by_user=self.staff_a)
+        pay_order(resolved, account=self.account_a, amount=10000, by_user=self.staff_a)
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(
+            reverse("sales:pos_pending_tasks_feed"),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn(str(actionable.id)[:8], payload["html"])
+        self.assertNotIn(str(resolved.id)[:8], payload["html"])
+
+    def test_pending_tasks_feed_count_matches_all_actionable_orders(self):
+        orders = [
+            create_order_with_items(
+                branch=self.branch_a,
+                created_by=self.staff_a,
+                order_type=Order.OrderType.DINE_IN,
+                note=f"navbat {index}",
+                items=[{"food": str(self.food_a.id), "qty": 1}],
+            )
+            for index in range(9)
+        ]
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(
+            reverse("sales:pos_pending_tasks_feed"),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["count"], 9)
+        self.assertIn(str(orders[0].id)[:8], payload["html"])
+        self.assertIn(str(orders[-1].id)[:8], payload["html"])
+
+    def test_ajax_pay_returns_status_html(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.post(
+            reverse("sales:pos_order_pay", args=[order.pk]),
+            {"amount": "10000"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("To'liq to'langan", payload["status_html"])
+        self.assertIn("Topshirish kutilmoqda", payload["pending_tasks_html"])
+        self.assertEqual(payload["pending_task_count"], 1)
+        order.refresh_from_db()
+        self.assertTrue(order.is_fully_paid)
+
+    def test_ajax_deliver_returns_status_html(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.post(
+            reverse("sales:pos_order_deliver", args=[order.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertIn("Topshirildi", payload["status_html"])
+        order.refresh_from_db()
+        self.assertTrue(order.is_delivered)
+
+    def test_pos_orders_defaults_to_20_items_per_page(self):
+        for _ in range(21):
+            create_order_with_items(
+                branch=self.branch_a,
+                created_by=self.staff_a,
+                order_type=Order.OrderType.DINE_IN,
+                note=None,
+                items=[{"food": str(self.food_a.id), "qty": 1}],
+            )
+
+        self._activate_branch(self.staff_a, self.branch_a)
+        response = self.client.get(reverse("sales:pos_orders"), {"period": "month"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 20)
+        self.assertEqual(len(response.context["orders"]), 20)
+        self.assertEqual(response.context["order_summary"]["count"], 21)
+        self.assertEqual(response.context["order_summary"]["total_amount"], 210000)
+
+    def test_pos_orders_support_payment_filter_period_summary_and_show_all(self):
+        unpaid_order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        partial_order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        pay_order(partial_order, account=self.account_a, amount=4000, by_user=self.staff_a)
+        old_order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 1}],
+        )
+        Order.objects.filter(pk=old_order.pk).update(created_at=timezone.now() - timedelta(days=3))
+
+        self._activate_branch(self.staff_a, self.branch_a)
+        response = self.client.get(
+            reverse("sales:pos_orders"),
+            {
+                "period": "day",
+                "payment": "partial",
+                "page_size": "all",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["page_obj"])
+        self.assertEqual(len(response.context["orders"]), 1)
+        self.assertEqual(response.context["orders"][0].pk, partial_order.pk)
+        self.assertEqual(response.context["order_summary"]["count"], 1)
+        self.assertEqual(response.context["order_summary"]["total_amount"], 10000)
+        self.assertEqual(response.context["order_summary"]["paid_amount"], 4000)
+        self.assertEqual(response.context["order_summary"]["outstanding_amount"], 6000)
+        self.assertNotIn(unpaid_order.pk, [order.pk for order in response.context["orders"]])
+
+    def test_pos_analytics_page_renders_metrics(self):
+        order = create_order_with_items(
+            branch=self.branch_a,
+            created_by=self.staff_a,
+            order_type=Order.OrderType.DINE_IN,
+            note=None,
+            items=[{"food": str(self.food_a.id), "qty": 2}],
+        )
+        mark_delivered(order, by_user=self.staff_a)
+        pay_order(order, account=self.account_a, amount=20000, by_user=self.staff_a)
+        CashTransaction.objects.create(
+            branch=self.branch_a,
+            account=self.account_a,
+            actor=self.superuser,
+            direction=Direction.OUT,
+            txn_type=TxnType.EXPENSE,
+            amount=5000,
+            occurred_at=timezone.now(),
+            reason="Expense",
+            note="Paper cups",
+        )
+        self._activate_branch(self.staff_a, self.branch_a)
+
+        response = self.client.get(reverse("sales:pos_analytics"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Analitika va hisobotlar")
+        self.assertContains(response, "Davr bo'yicha aniq hisobot")
+        self.assertContains(response, "Cheese Burger")
+        self.assertNotContains(response, "cdn.jsdelivr.net/npm/chart.js")
 
 
 class CashTransactionAdminPermissionTests(TestCase):

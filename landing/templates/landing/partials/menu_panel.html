@@ -1,0 +1,39 @@
+<div class="menu-results-head">
+  <div>
+    <h2 class="menu-results-title">Mahsulotlar</h2>
+    <p class="menu-results-subtitle">
+      {% if selected_category_name %}
+        {{ selected_category_name }} bo'yicha natijalar
+      {% elif type %}
+        Tanlangan bo'lim bo'yicha natijalar
+      {% else %}
+        Barcha mahsulotlar
+      {% endif %}
+    </p>
+  </div>
+  <div class="menu-results-meta">{{ result_count }} ta natija</div>
+</div>
+
+{% if available_categories %}
+  <div class="menu-category-pills" id="landingCategoryFilters">
+    <button class="menu-category-pill {% if not category %}is-active{% endif %}" type="button" data-category="">Barcha kategoriyalar</button>
+    {% for item in available_categories %}
+      <button
+        class="menu-category-pill {% if category == item.slug %}is-active{% endif %}"
+        type="button"
+        data-category="{{ item.slug }}"
+      >
+        {{ item.name }}
+      </button>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if foods %}
+  {% include "landing/partials/public_food_grid.html" with foods=foods show_branch=True %}
+{% else %}
+  <div class="menu-empty-state">
+    <div class="menu-empty-title">Mos mahsulot topilmadi</div>
+    <p class="menu-empty-copy">Qidiruvni tozalang yoki boshqa filtr tanlab ko'ring. "Barchasi" holati barcha mahsulotlarni qayta ko'rsatadi.</p>
+  </div>
+{% endif %}

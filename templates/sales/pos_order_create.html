@@ -13,6 +13,7 @@
   </div>
 
   <div class="pos-head-actions">
+    <a class="btn" href="{% url 'sales:pos_analytics' %}">Analitika</a>
     <a class="btn" href="{% url 'sales:pos_orders' %}">← Buyurtmalar</a>
   </div>
 </div>
@@ -33,6 +34,10 @@
       <button type="button" class="pos-tab" data-type="{{ FoodType.FASTFOOD }}">Fastfood</button>
       <button type="button" class="pos-tab" data-type="{{ FoodType.DRINK }}">Ichimliklar</button>
       <button type="button" class="pos-tab" data-type="{{ FoodType.SET }}">Setlar</button>
+    </div>
+
+    <div id="posPendingTaskMount" data-refresh-url="{% url 'sales:pos_pending_tasks_feed' %}">
+      {% include "sales/partials/pending_task_bar.html" %}
     </div>
 
     <div class="mb-grid pos-menu-grid" id="posMenuGrid">
@@ -432,5 +437,15 @@
       alert("Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating.");
     }
   });
+</script>
+<script src="{% static 'js/pos_quick_actions.js' %}"></script>
+<script>
+  if (window.initPosQuickActions) {
+    window.initPosQuickActions({
+      accounts: {{ quick_action_accounts_json|safe }},
+      taskMountSelector: "#posPendingTaskMount",
+      taskRefreshUrl: "{% url 'sales:pos_pending_tasks_feed' %}"
+    });
+  }
 </script>
 {% endblock %}

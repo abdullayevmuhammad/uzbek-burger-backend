@@ -1,0 +1,39 @@
+{% load static %}
+{% load landing_utils %}
+<div class="public-menu-grid">
+  {% for food in foods %}
+    <article class="public-menu-card" data-food-type="{{ food.type|lower }}">
+      <div class="public-menu-card-media">
+        {% if food.image %}
+          <img class="public-menu-card-bg" src="{{ food.image.url }}" alt="" aria-hidden="true">
+          <img class="public-menu-card-img" src="{{ food.image.url }}" alt="{{ food.name }}">
+        {% else %}
+          <div class="public-menu-card-placeholder">
+            <img src="{% static 'landing/img/placeholder-food.svg' %}" alt="{{ food.name }}">
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="public-menu-card-body">
+        <div class="public-menu-card-kicker">
+          <div class="public-menu-card-badges">
+            <span class="public-menu-badge">
+              {% if food.category %}{{ food.category.name }}{% else %}{{ food.get_type_display }}{% endif %}
+            </span>
+            <span class="public-menu-badge public-menu-badge-soft">{{ food.get_type_display }}</span>
+          </div>
+          {% if show_branch and food.branch %}
+            <span class="public-menu-branch">{{ food.branch.name }}</span>
+          {% endif %}
+        </div>
+
+        <h3 class="public-menu-card-title">{{ food.name }}</h3>
+
+        <div class="public-menu-card-foot">
+          <span class="public-menu-price">{{ food.sell_price|som }}</span>
+          <span class="public-menu-card-type">{{ food.get_type_display }}</span>
+        </div>
+      </div>
+    </article>
+  {% endfor %}
+</div>

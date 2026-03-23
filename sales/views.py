@@ -5,10 +5,12 @@ from typing import Any
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Case, When, Value, IntegerField
+from django.db.models import Case, Count, ExpressionWrapper, F, IntegerField, Sum, Value, When
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.views.decorators.http import require_http_methods, require_POST
 
 from core.middleware import get_active_branch
@@ -19,15 +21,23 @@ from menu.models import Food, FoodType
 from users.utils import is_admin_user
 
 from .models import Order
+from .reporting import build_branch_analytics, resolve_date_bounds, resolve_reporting_period
 from .services import (
     OrderValidationError,
     build_receipt_context,
     cancel_order,
+    count_pending_action_orders,
     create_order_with_items,
     ensure_kitchen_task,
+    get_pending_action_orders,
     mark_delivered,
     pay_order,
 )
+
+
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 200
+PAGE_SIZE_CHOICES = [20, 50, 100, 200]
 
 
 def _is_admin_like(user) -> bool:
@@ -59,6 +69,102 @@ def _branch_accounts(branch, *, ensure_default: bool = False):
     return qs
 
 
+def _is_ajax(request):
+    return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+def _json_error(message: str, *, status: int = 400):
+    return JsonResponse({"ok": False, "message": message}, status=status)
+
+
+def _parse_page_size(raw_value: str):
+    value = (raw_value or "").strip().lower()
+    if value == "all":
+        return "all"
+
+    try:
+        parsed = int(value or DEFAULT_PAGE_SIZE)
+    except (TypeError, ValueError):
+        return DEFAULT_PAGE_SIZE
+
+    return max(1, min(parsed, MAX_PAGE_SIZE))
+
+
+def _update_querystring(querydict, **updates):
+    params = querydict.copy()
+    for key, value in updates.items():
+        if value in (None, ""):
+            params.pop(key, None)
+            continue
+        params[key] = value
+    return params.urlencode()
+
+
+def _quick_action_accounts_payload(branch):
+    return [
+        {
+            "id": str(account.id),
+            "name": account.name,
+        }
+        for account in _branch_accounts(branch)
+    ]
+
+
+def _order_due(order):
+    return max(0, int(order.total_amount) - int(order.paid_amount))
+
+
+def _render_order_status_html(request, order):
+    return render_to_string(
+        "sales/partials/order_status_badges.html",
+        {
+            "o": order,
+            "due": _order_due(order),
+        },
+        request=request,
+    )
+
+
+def _render_pending_tasks_html(request, branch):
+    pending_orders = get_pending_action_orders(branch)
+    pending_task_count = count_pending_action_orders(branch)
+    html = render_to_string(
+        "sales/partials/pending_task_bar.html",
+        {
+            "pending_orders": pending_orders,
+            "pending_task_count": pending_task_count,
+        },
+        request=request,
+    )
+    return html, pending_task_count
+
+
+def _build_quick_action_response(request, order, message):
+    refreshed_order = (
+        Order.objects.filter(pk=order.pk)
+        .select_related("created_by", "paid_by", "delivered_by", "branch", "kitchen_task")
+        .prefetch_related("items__food")
+        .get()
+    )
+    status_html = _render_order_status_html(request, refreshed_order)
+    pending_tasks_html, pending_task_count = _render_pending_tasks_html(request, refreshed_order.branch)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "message": message,
+            "order_id": str(refreshed_order.pk),
+            "due": _order_due(refreshed_order),
+            "is_delivered": refreshed_order.is_delivered,
+            "is_fully_paid": refreshed_order.is_fully_paid,
+            "task_relevant": (not refreshed_order.is_delivered) or (not refreshed_order.is_fully_paid),
+            "status_html": status_html,
+            "pending_tasks_html": pending_tasks_html,
+            "pending_task_count": pending_task_count,
+        }
+    )
+
+
 @login_required
 def pos_orders(request):
     try:
@@ -70,10 +176,15 @@ def pos_orders(request):
 
     status = (request.GET.get("status") or "").strip()
     delivered = (request.GET.get("delivered") or "").strip()
+    payment = (request.GET.get("payment") or "").strip()
+    period = resolve_reporting_period(request.GET.get("period"))
+    page_size = _parse_page_size(request.GET.get("page_size"))
+    start_dt, end_dt = resolve_date_bounds(period["date_from"], period["date_to"])
 
     qs = (
         Order.objects.filter(branch=branch)
         .select_related("created_by", "paid_by", "delivered_by")
+        .filter(created_at__gte=start_dt, created_at__lt=end_dt)
         .order_by("-created_at")
     )
 
@@ -83,8 +194,44 @@ def pos_orders(request):
     if delivered in {"0", "1"}:
         qs = qs.filter(is_delivered=(delivered == "1"))
 
-    orders = list(qs[:200])
+    if payment == "paid":
+        qs = qs.filter(total_amount__gt=0, paid_amount__gte=F("total_amount"))
+    elif payment == "partial":
+        qs = qs.filter(paid_amount__gt=0, paid_amount__lt=F("total_amount"))
+    elif payment == "unpaid":
+        qs = qs.filter(paid_amount=0)
 
+    due_expression = ExpressionWrapper(F("total_amount") - F("paid_amount"), output_field=IntegerField())
+    summary_row = qs.aggregate(
+        order_count=Count("pk"),
+        total_amount_sum=Sum("total_amount"),
+        paid_amount_sum=Sum("paid_amount"),
+        outstanding_amount_sum=Sum(due_expression),
+    )
+    order_summary = {
+        "count": int(summary_row["order_count"] or 0),
+        "total_amount": int(summary_row["total_amount_sum"] or 0),
+        "paid_amount": int(summary_row["paid_amount_sum"] or 0),
+        "outstanding_amount": int(summary_row["outstanding_amount_sum"] or 0),
+    }
+
+    page_obj = None
+    page_numbers = []
+    if page_size == "all":
+        orders = list(qs)
+    else:
+        paginator = Paginator(qs, page_size)
+        page_obj = paginator.get_page(request.GET.get("page"))
+        ellipsis = getattr(paginator, "ELLIPSIS", "…")
+        page_numbers = [
+            "..." if item == ellipsis else item
+            for item in paginator.get_elided_page_range(page_obj.number, on_each_side=1, on_ends=1)
+        ]
+        orders = list(page_obj.object_list)
+
+    accounts = list(_branch_accounts(branch))
+    pagination_query = _update_querystring(request.GET, page=None)
+    clear_filters_url = f"{request.path}?period={period['range_key']}"
     return render(
         request,
         "sales/pos_orders.html",
@@ -93,7 +240,56 @@ def pos_orders(request):
             "orders": orders,
             "status": status,
             "delivered": delivered,
+            "payment": payment,
+            "period_key": period["range_key"],
+            "period_date_from": period["date_from"],
+            "period_date_to": period["date_to"],
+            "order_summary": order_summary,
+            "page_obj": page_obj,
+            "page_numbers": page_numbers,
+            "is_paginated": bool(page_obj and page_obj.paginator.num_pages > 1),
+            "page_size": str(page_size),
+            "page_size_choices": PAGE_SIZE_CHOICES,
+            "pagination_query": pagination_query,
+            "clear_filters_url": clear_filters_url,
             "Status": Order.Status,
+            "quick_action_accounts_json": json.dumps(
+                [{"id": str(account.id), "name": account.name} for account in accounts],
+                ensure_ascii=False,
+            ),
+        },
+    )
+
+
+@login_required
+def pos_analytics(request):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return redirect("select_branch")
+    except PermissionError:
+        return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
+
+    period = resolve_reporting_period(
+        request.GET.get("range"),
+        request.GET.get("date_from"),
+        request.GET.get("date_to"),
+    )
+    analytics = build_branch_analytics(
+        branch,
+        date_from=period["date_from"],
+        date_to=period["date_to"],
+    )
+
+    return render(
+        request,
+        "sales/pos_analytics.html",
+        {
+            "branch": branch,
+            "range_key": period["range_key"],
+            "date_from": period["date_from"].isoformat(),
+            "date_to": period["date_to"].isoformat(),
+            "analytics": analytics,
         },
     )
 
@@ -144,6 +340,8 @@ def pos_order_create(request):
 
     accounts = list(_branch_accounts(branch))
     single_account = accounts[0] if len(accounts) == 1 else None
+    pending_orders = get_pending_action_orders(branch)
+    pending_task_count = count_pending_action_orders(branch)
 
     if request.method == "POST":
         raw_items = request.POST.get("items_json") or "[]"
@@ -179,6 +377,9 @@ def pos_order_create(request):
                     mark_delivered(order, by_user=request.user)
 
                 if is_paid:
+                    if not account_id and len(accounts) > 1:
+                        raise ValueError("To'lov hisobini tanlang.")
+
                     if not account_id:
                         acc = single_account
                     else:
@@ -216,6 +417,9 @@ def pos_order_create(request):
             "single_account": single_account,
             "has_payment_accounts": bool(accounts),
             "OrderType": Order.OrderType,
+            "pending_orders": pending_orders,
+            "pending_task_count": pending_task_count,
+            "quick_action_accounts_json": json.dumps(_quick_action_accounts_payload(branch), ensure_ascii=False),
             "hide_sidebar": True,
             "hide_topbar": True,
             "body_class": "no-sidebar pos-no-nav",
@@ -265,16 +469,21 @@ def pos_order_detail(request, pk):
 @login_required
 @require_POST
 def pos_order_pay(request, pk):
+    ajax_request = _is_ajax(request)
     try:
         branch = _require_branch(request)
     except LookupError:
-        return redirect("select_branch")
+        return _json_error("Filial tanlanmagan.", status=400) if ajax_request else redirect("select_branch")
     except PermissionError:
+        if ajax_request:
+            return _json_error("Faol filial tanlanmagan.", status=403)
         return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
 
     order = get_object_or_404(Order, pk=pk, branch=branch)
 
     if order.is_locked:
+        if ajax_request:
+            return _json_error("Bu buyurtma yakunlangan. Endi o'zgartirib bo'lmaydi.")
         messages.error(request, "Bu buyurtma yakunlangan. Endi o'zgartirib bo'lmaydi.")
         return redirect("sales:pos_order_detail", pk=pk)
 
@@ -292,21 +501,32 @@ def pos_order_pay(request, pk):
             message = "Faol to'lov hisobi topilmadi. Admin: filial uchun kamida bitta hisob yarating."
             if accounts:
                 message = "Kassa tanlang."
+            if ajax_request:
+                return _json_error(message)
             messages.error(request, message)
             return redirect("sales:pos_order_detail", pk=pk)
     else:
         acc = get_object_or_404(MoneyAccount, id=account_id, branch=branch, is_active=True)
 
     try:
-        amount = parse_uzs_amount(amount_raw)
+        if amount_raw:
+            amount = parse_uzs_amount(amount_raw)
+        else:
+            amount = _order_due(order)
     except Exception:
+        if ajax_request:
+            return _json_error("To'lov summasi noto'g'ri.")
         messages.error(request, "To'lov summasi noto'g'ri.")
         return redirect("sales:pos_order_detail", pk=pk)
 
     try:
         pay_order(order, account=acc, amount=amount, note=note, by_user=request.user)
+        if ajax_request:
+            return _build_quick_action_response(request, order, "To'lov qabul qilindi.")
         messages.success(request, "To'lov qabul qilindi.")
     except Exception as e:
+        if ajax_request:
+            return _json_error(f"To'lovda xatolik: {e}")
         messages.error(request, f"To'lovda xatolik: {e}")
 
     return redirect("sales:pos_order_detail", pk=pk)
@@ -315,26 +535,48 @@ def pos_order_pay(request, pk):
 @login_required
 @require_POST
 def pos_order_deliver(request, pk):
+    ajax_request = _is_ajax(request)
     try:
         branch = _require_branch(request)
     except LookupError:
-        return redirect("select_branch")
+        return _json_error("Filial tanlanmagan.", status=400) if ajax_request else redirect("select_branch")
     except PermissionError:
+        if ajax_request:
+            return _json_error("Faol filial tanlanmagan.", status=403)
         return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
 
     order = get_object_or_404(Order, pk=pk, branch=branch)
 
     if order.is_locked:
+        if ajax_request:
+            return _json_error("Bu buyurtma yakunlangan. Endi o'zgartirib bo'lmaydi.")
         messages.error(request, "Bu buyurtma yakunlangan. Endi o'zgartirib bo'lmaydi.")
         return redirect("sales:pos_order_detail", pk=pk)
 
     try:
         mark_delivered(order, by_user=request.user)
+        if ajax_request:
+            return _build_quick_action_response(request, order, "Buyurtma topshirildi deb belgilandi.")
         messages.success(request, "Order 'topshirildi' deb belgilandi (stock yechildi).")
     except Exception as e:
+        if ajax_request:
+            return _json_error(f"Topshirishda xatolik: {e}")
         messages.error(request, f"Topshirishda xatolik: {e}")
 
     return redirect("sales:pos_order_detail", pk=pk)
+
+
+@login_required
+def pos_pending_tasks_feed(request):
+    try:
+        branch = _require_branch(request)
+    except LookupError:
+        return _json_error("Filial tanlanmagan.", status=400)
+    except PermissionError:
+        return _json_error("Faol filial tanlanmagan.", status=403)
+
+    html, count = _render_pending_tasks_html(request, branch)
+    return JsonResponse({"ok": True, "html": html, "count": count})
 
 
 @login_required
@@ -403,9 +645,11 @@ def pos_order_receipt(request, pk):
         return HttpResponseForbidden("Sizga filial biriktirilmagan yoki faol filial tanlanmagan.")
 
     order = get_object_or_404(Order, pk=pk, branch=branch)
-    # paper_width = request.GET.get("paper", "80")
+    paper_width = (request.GET.get("paper") or "58").strip()
+    if paper_width not in {"58", "80"}:
+        paper_width = "58"
     ctx = build_receipt_context(order)
-    ctx.update({"branch": branch})
+    ctx.update({"branch": branch, "paper_width": paper_width})
     return render(request, "sales/receipt.html", ctx)
 
 
@@ -442,15 +686,6 @@ def pos_order_kitchen_task(request, pk):
             "body_class": "no-sidebar pos-no-nav",
         },
     )
-
-from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import get_object_or_404, redirect
-from django.http import HttpResponseForbidden
-
-from sales.models import Order
-from sales.services import build_receipt_context
-
 @login_required
 def pos_order_receipt_data(request, pk):
     try:

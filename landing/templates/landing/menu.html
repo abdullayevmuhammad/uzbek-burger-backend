@@ -1,56 +1,53 @@
-{% extends 'landing/base.html' %}
+{% extends "landing/base.html" %}
 {% load static %}
-{% load landing_utils %}
+
 {% block title %}Menu - UzbekBurger{% endblock %}
+{% block body_class %}menu-page{% endblock %}
+
 {% block content %}
-<div class="container" style="padding: 4rem 1rem;">
-  <div class="section-header">
-    <h1 class="section-title">Menu</h1>
-    <p class="section-subtitle">Bizning barcha mazali taomlarimiz.</p>
-  </div>
-
-  <form method="get" class="search-box" style="max-width: 600px; margin: 0 auto;">
-    <input type="text" name="q" value="{{ q|default:'' }}" placeholder="Qidirish...">
-    {% if type %}<input type="hidden" name="type" value="{{ type }}">{% endif %}
-  </form>
-
-  <div class="filter-pills" style="margin-top: 1.25rem;">
-    <a class="filter-pill {% if not type %}active{% endif %}"
-       href="{% url 'landing:menu' %}{% if q %}?q={{ q|urlencode }}{% endif %}">Barchasi</a>
-
-    <a class="filter-pill {% if type == 'fastfood' %}active{% endif %}"
-       href="{% url 'landing:menu' %}?type=fastfood{% if q %}&q={{ q|urlencode }}{% endif %}">Fastfood</a>
-
-    <a class="filter-pill {% if type == 'drink' %}active{% endif %}"
-       href="{% url 'landing:menu' %}?type=drink{% if q %}&q={{ q|urlencode }}{% endif %}">Ichimliklar</a>
-
-    <a class="filter-pill {% if type == 'set' %}active{% endif %}"
-       href="{% url 'landing:menu' %}?type=set{% if q %}&q={{ q|urlencode }}{% endif %}">Setlar</a>
-  </div>
-
-  <div class="menu-grid" style="margin-top: 2rem;">
-    {% if foods %}
-      {% for food in foods %}
-        <div class="menu-card">
-          {% if food.image %}
-            <img class="menu-img" src="{{ food.image.url }}" alt="{{ food.name }}">
-          {% else %}
-            <img class="menu-img" src="{% static 'landing/img/placeholder-food.svg' %}" alt="{{ food.name }}">
-          {% endif %}
-          <div class="menu-content">
-            <h3 class="menu-title">{{ food.name }}</h3>
-            <p class="menu-desc">
-              {% if food.category %}{{ food.category.name }}{% else %}{{ food.get_type_display }}{% endif %}
-            </p>
-            <div class="menu-price">{{ food.sell_price|som }}</div>
-          </div>
+<section class="menu-shell">
+  <div class="container">
+    <div class="menu-surface">
+      <form class="menu-toolbar" id="landingMenuFilters" action="{% url 'landing:menu' %}" method="get" data-live-url="{% url 'landing:menu_live' %}">
+        <div class="menu-search-wrap">
+          <label class="sr-only" for="landingMenuSearch">Qidirish</label>
+          <span class="menu-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" role="presentation">
+              <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2"></circle>
+              <path d="M20 20L15.5 15.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+            </svg>
+          </span>
+          <input
+            id="landingMenuSearch"
+            class="menu-search-input"
+            type="search"
+            name="q"
+            value="{{ q }}"
+            placeholder="Burger, set, ichimlik yoki kategoriya bo'yicha qidiring"
+            autocomplete="off"
+          >
+          <button class="menu-search-clear" id="landingMenuSearchClear" type="button" {% if not q %}hidden{% endif %}>Tozalash</button>
         </div>
-      {% endfor %}
-    {% else %}
-      <div style="grid-column: 1 / -1; text-align:center;">
-        <p class="text-secondary">Hozircha bu bo'limda mahsulotlar yo'q.</p>
+
+        <input type="hidden" name="type" id="landingMenuTypeInput" value="{{ type }}">
+        <input type="hidden" name="category" id="landingMenuCategoryInput" value="{{ category }}">
+
+        <div class="menu-type-pills" id="landingTypeFilters">
+          <button class="menu-type-pill {% if not type %}is-active{% endif %}" type="button" data-type="">Barchasi</button>
+          <button class="menu-type-pill {% if type == 'fastfood' %}is-active{% endif %}" type="button" data-type="fastfood">Fastfood</button>
+          <button class="menu-type-pill {% if type == 'drink' %}is-active{% endif %}" type="button" data-type="drink">Ichimliklar</button>
+          <button class="menu-type-pill {% if type == 'set' %}is-active{% endif %}" type="button" data-type="set">Setlar</button>
+        </div>
+
+        <div class="menu-toolbar-meta">
+          <span class="menu-live-status" id="landingMenuLiveStatus" aria-live="polite">Natijalar yozayotganingizda yangilanadi</span>
+        </div>
+      </form>
+
+      <div id="landingMenuPanel">
+        {% include "landing/partials/menu_panel.html" %}
       </div>
-    {% endif %}
+    </div>
   </div>
-</div>
+</section>
 {% endblock %}

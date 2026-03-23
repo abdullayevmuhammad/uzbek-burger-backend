@@ -1,9 +1,18 @@
+{% load static %}
 <header class="site-header">
   <div class="container">
     <nav class="navbar">
-      <a class="logo" href="{% url 'landing:home' %}">UzbekBurger</a>
+      <a class="logo" href="{% url 'landing:home' %}">
+        <span class="logo-mark-wrap">
+          <img class="logo-mark" src="{% static 'img/favicon.svg' %}" alt="UzbekBurger">
+        </span>
+        <span class="logo-text">
+          <strong>UzbekBurger</strong>
+          {% comment %} <small>POS style menu</small> {% endcomment %}
+        </span>
+      </a>
 
-      <button class="hamburger" aria-label="Menu" type="button">☰</button>
+      <button class="hamburger" aria-label="Menu" type="button" data-open-label="Menu" data-close-label="Yopish">Menu</button>
 
       <div class="nav-links">
         <a class="nav-link {% if active_page == 'home' %}active{% endif %}" href="{% url 'landing:home' %}">Bosh sahifa</a>
@@ -16,7 +25,7 @@
 
       <div class="nav-actions">
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Mavzu">
-          <span>◐</span>
+          <span class="theme-toggle-label">Mavzu</span>
         </button>
       </div>
     </nav>
